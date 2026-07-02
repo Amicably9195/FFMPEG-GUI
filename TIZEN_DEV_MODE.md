@@ -19,6 +19,4 @@ Once dev mode is on, you install via **Tizen Studio** (Samsung's official IDE, f
 
 ## The catch for something like SmartTube
 
-There's no SmartTube build for Tizen. The Tizen homebrew scene is much smaller than webOS's — a few community devs have built ad-blocking YouTube clients as `.wgt` apps in the past, but they're inconsistent, often break with Samsung firmware updates, and aren't actively maintained the way SmartTube is for Android TV. Search around for something like "YouTube ad-free Tizen wgt" and you may find a working one, but there's no guarantee of long-term support.
-
-Given that, an Android TV box is still the more reliable path if ad-free YouTube matters to you.
+There's no SmartTube build for Tizen, but there is an actively maintained equivalent: **TizenTube**, installed via **TizenBrew**. It removes YouTube ads and adds SponsorBlock on the TV's native YouTube interface. See [TIZEN_ADFREE_YOUTUBE.md](TIZEN_ADFREE_YOUTUBE.md) for the full step-by-step guide.
