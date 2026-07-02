@@ -16,6 +16,7 @@ Usable as a library (see convert()) or from the command line:
 import argparse
 import math
 import os
+import re
 import shutil
 import sys
 
@@ -253,6 +254,110 @@ def ocr_words(gray, min_conf=45, vertical=True):
     return kept
 
 
+# ── Dimension parsing & scale verification ────────────────────────────────────
+
+_QUOTE_MAP = str.maketrans({"’": "'", "‘": "'", "`": "'", "′": "'",
+                            "“": '"', "”": '"', "″": '"'})
+
+
+def parse_dimension(text):
+    """Parse dimension text into feet, or None if it isn't a dimension.
+    Handles 40.00'  100'  5'-6"  9.8'  6"  ±15' plus survey offsets like
+    2.3'N. OCR often reads the foot mark as '!', so accept that too."""
+    t = text.strip().translate(_QUOTE_MAP).strip("()[]{},;:").replace(" ", "")
+    m = re.fullmatch(r"[±+\-]?(\d{1,4}(?:\.\d{1,3})?)['!]"
+                     r"(?:-?(\d{1,2}(?:\.\d+)?)\")?[NSEWnsew]?", t)
+    if m:
+        feet = float(m.group(1))
+        if m.group(2):
+            feet += float(m.group(2)) / 12.0
+        return feet if feet > 0 else None
+    m = re.fullmatch(r"[±+\-]?(\d{1,3}(?:\.\d+)?)\"[NSEWnsew]?", t)
+    if m:
+        inches = float(m.group(1))
+        return inches / 12.0 if inches > 0 else None
+    return None
+
+
+def _verifiable(w):
+    """Only real span dimensions can be checked against drawn lines: compass
+    offsets (2.3'N) and tiny values aren't drawn to a measurable length."""
+    return w.get("dim") and w["dim"] >= 5.0 and \
+        not w["text"].strip().upper().endswith(("N", "S", "E", "W"))
+
+
+def _point_seg_dist(px, py, seg):
+    x1, y1, x2, y2 = seg
+    dx, dy = x2 - x1, y2 - y1
+    l2 = dx * dx + dy * dy
+    if l2 == 0:
+        return math.hypot(px - x1, py - y1)
+    t = max(0.0, min(1.0, ((px - x1) * dx + (py - y1) * dy) / l2))
+    return math.hypot(px - (x1 + t * dx), py - (y1 + t * dy))
+
+
+def estimate_scale(words, segs, tolerance=0.10):
+    """Cross-check parsed dimensions against nearby drawn lines.
+
+    Each dimension label paired with the line it measures implies a scale
+    (feet per pixel); on a consistent drawing they all agree.  The consensus
+    is the scale cluster supported by the most independent dimensions
+    (minimum 3).  Returns the consensus scale (ft/px) or None, and sets
+    per-word:
+      dim_ok = True   dimension agrees with the consensus scale
+      dim_ok = False  dimension contradicts it -> needs human review
+    """
+    dims = [w for w in words if _verifiable(w)]
+    if len(dims) < 3 or len(segs) < 1:
+        return None
+    # measurement geometry: re-merge with a generous gap so lines broken by
+    # crossings (a walk cutting a lot line in two) read as their full length
+    meas = merge_segments(segs, gap_tol=40.0)
+    if len(meas) == 0:
+        return None
+    mlen = np.hypot(meas[:, 2] - meas[:, 0], meas[:, 3] - meas[:, 1])
+    mang = np.degrees(np.arctan2(meas[:, 3] - meas[:, 1],
+                                 meas[:, 2] - meas[:, 0])) % 180.0
+
+    cands = []  # (word index, implied ft/px, distance to line)
+    for wi, w in enumerate(dims):
+        cx, cy = w["x"] + w["w"] / 2.0, w["y"] + w["h"] / 2.0
+        vertical = w["rotation"] in (90, 270)
+        radius = 4.0 * w["cap"] + max(w["w"], w["h"])
+        for i in range(len(meas)):
+            if mlen[i] < 30:
+                continue
+            ang_ok = (70 < mang[i] < 110) if vertical else \
+                     (mang[i] < 20 or mang[i] > 160)
+            if not ang_ok:
+                continue
+            d = _point_seg_dist(cx, cy, meas[i])
+            if d > radius:
+                continue
+            cands.append((wi, w["dim"] / mlen[i], d))
+    if not cands:
+        return None
+
+    # densest cluster of implied scales, ranked by distinct supporting words
+    best_score, best_members = None, None
+    for _, s0, _ in cands:
+        members = [c for c in cands if abs(c[1] / s0 - 1.0) <= tolerance]
+        support = len({c[0] for c in members})
+        score = (support, -min(c[2] for c in members))
+        if best_score is None or score > best_score:
+            best_score, best_members = score, members
+    if len({c[0] for c in best_members}) < 3:
+        return None
+    scale = float(np.median([c[1] for c in best_members]))
+
+    for wi, w in enumerate(dims):
+        mine = [c for c in cands if c[0] == wi]
+        if mine:
+            w["dim_ok"] = any(abs(c[1] / scale - 1.0) <= 1.5 * tolerance
+                              for c in mine)
+    return scale
+
+
 def mask_words(ink, words, pad=2):
     """Blank OCRed word boxes out of the ink mask so text isn't vectorized."""
     out = ink.copy()
@@ -390,11 +495,14 @@ def residual_curves(ink, segs, width, min_area=40, epsilon=1.8):
 # ── DXF output ─────────────────────────────────────────────────────────────────
 
 def write_dxf(path, img_h, segments, curves, words, scale=1.0,
-              min_len_px=6.0):
+              min_len_px=6.0, units_feet=False):
     doc = ezdxf.new("R2010", setup=True)
     doc.layers.add("LINES", color=7)
     doc.layers.add("CURVES", color=4)
     doc.layers.add("TEXT", color=3)
+    doc.layers.add("TEXT_REVIEW", color=1)  # red: uncertain, check by hand
+    if units_feet:
+        doc.header["$INSUNITS"] = 2  # feet
     msp = doc.modelspace()
 
     def pt(x, y):
@@ -413,12 +521,19 @@ def write_dxf(path, img_h, segments, curves, words, scale=1.0,
 
     for wd in words:
         height = max(0.5 * scale, 0.72 * wd["cap"] * scale)
+        layer = "TEXT_REVIEW" if wd.get("review") else "TEXT"
         msp.add_text(wd["text"], dxfattribs={
-            "layer": "TEXT",
+            "layer": layer,
             "height": height,
             "rotation": wd["rotation"],
             "insert": pt(*wd["insert"]),
         })
+        if wd.get("review"):
+            # box the spot so a human can find and double-check it
+            x, y, w, h = wd["x"], wd["y"], wd["w"], wd["h"]
+            msp.add_lwpolyline(
+                [pt(x, y), pt(x + w, y), pt(x + w, y + h), pt(x, y + h)],
+                close=True, dxfattribs={"layer": "TEXT_REVIEW"})
 
     doc.saveas(path)
     return n_lines
@@ -433,6 +548,9 @@ def convert(input_path, output_path=None, *,
             do_ocr=True,
             do_curves=True,
             ortho_snap=True,
+            auto_scale=True,
+            flag_review=True,
+            review_conf=70,
             min_line_px=6.0,
             speck_px=8,
             ocr_min_conf=45,
@@ -492,12 +610,47 @@ def convert(input_path, output_path=None, *,
         curves = residual_curves(line_img, segs, width)
         log(f"  {len(curves)} curve/symbol outlines traced.")
 
+    # dimension parsing, scale verification and review flagging
+    units_feet = False
+    for wd in words:
+        wd["dim"] = parse_dimension(wd["text"])
+        if flag_review and wd["conf"] < review_conf:
+            wd["review"] = True
+    n_dims = sum(1 for w in words if w["dim"])
+    if n_dims:
+        log(f"Parsed {n_dims} dimension labels "
+            f"({', '.join(w['text'] for w in words if w['dim'])}).")
+    if auto_scale and n_dims:
+        ftpx = estimate_scale(words, segs)
+        checked = [w for w in words if "dim_ok" in w]
+        bad = [w for w in checked if not w["dim_ok"]]
+        if flag_review:
+            for w in bad:
+                w["review"] = True
+        if ftpx:
+            scale = ftpx
+            units_feet = True
+            log(f"Scale verified against drawn lines: 1 px = {ftpx:.5f} ft "
+                f"-> DXF output is in FEET. "
+                f"{len(checked) - len(bad)} dimensions agree"
+                + (f", {len(bad)} contradict and were flagged." if bad
+                   else "."))
+        else:
+            log("Dimensions found but no consistent scale - "
+                "output stays in pixel units.")
+    n_review = sum(1 for w in words if w.get("review"))
+    if n_review:
+        log(f"{n_review} uncertain text items moved to red TEXT_REVIEW layer "
+            f"(boxed on the drawing) - double-check those by hand.")
+
     n_lines = write_dxf(output_path, gray.shape[0], segs, curves, words,
-                        scale=scale, min_len_px=min_line_px)
+                        scale=scale, min_len_px=min_line_px,
+                        units_feet=units_feet)
     log(f"Wrote {output_path}  ({n_lines} lines, {len(curves)} polylines, "
         f"{len(words)} text entities)")
     return dict(output=output_path, lines=n_lines, curves=len(curves),
-                words=len(words), size=gray.shape)
+                words=len(words), review=n_review,
+                units="feet" if units_feet else "pixels", size=gray.shape)
 
 
 def render_preview(dxf_path, png_path, dpi=150):
@@ -533,6 +686,12 @@ def main():
                     help="straight lines only, skip curve tracing")
     ap.add_argument("--no-ortho", action="store_true",
                     help="don't snap near-horizontal/vertical lines to axis")
+    ap.add_argument("--no-autoscale", action="store_true",
+                    help="don't verify dimensions / auto-scale output to feet")
+    ap.add_argument("--no-review", action="store_true",
+                    help="don't flag uncertain text on the TEXT_REVIEW layer")
+    ap.add_argument("--review-conf", type=float, default=70,
+                    help="OCR confidence below this is flagged (default 70)")
     ap.add_argument("--min-line", type=float, default=6.0,
                     help="drop lines shorter than this many pixels")
     ap.add_argument("--speck", type=int, default=8,
@@ -548,6 +707,9 @@ def main():
             do_ocr=not args.no_ocr,
             do_curves=not args.no_curves,
             ortho_snap=not args.no_ortho,
+            auto_scale=not args.no_autoscale,
+            flag_review=not args.no_review,
+            review_conf=args.review_conf,
             min_line_px=args.min_line,
             speck_px=args.speck)
     if args.preview:
