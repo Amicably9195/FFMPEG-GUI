@@ -1,0 +1,28 @@
+name: Build Drawing2CAD exe
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/drawing-scan-to-cad-v1l3ff]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pyinstaller customtkinter tkinterdnd2 opencv-python-headless numpy ezdxf pytesseract pillow
+
+      - name: Build exe
+        run: pyinstaller Drawing2CAD.spec
+
+      - name: Upload exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: Drawing2CAD-windows
+          path: dist/Drawing2CAD.exe
