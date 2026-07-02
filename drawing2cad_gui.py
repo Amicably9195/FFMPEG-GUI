@@ -97,13 +97,15 @@ class Drawing2CADApp(_BASE):
         self.v_ortho  = tk.BooleanVar(value=True)
         self.v_autoscale = tk.BooleanVar(value=True)
         self.v_review = tk.BooleanVar(value=True)
+        self.v_clean = tk.BooleanVar(value=True)
         for label, var in [("Auto-crop page", self.v_crop),
                            ("Straighten (deskew)", self.v_deskew),
                            ("OCR text", self.v_ocr),
                            ("Trace curves", self.v_curves),
                            ("Snap lines to axis", self.v_ortho),
                            ("Auto-scale to feet", self.v_autoscale),
-                           ("Flag uncertain text", self.v_review)]:
+                           ("Flag uncertain text", self.v_review),
+                           ("Deep-clean dirty scans", self.v_clean)]:
             ctk.CTkCheckBox(orow1, text=label, variable=var,
                             fg_color=ACCENT, hover_color=ACCENT2,
                             font=("Segoe UI", 12)).pack(side="left", padx=8)
@@ -216,6 +218,7 @@ class Drawing2CADApp(_BASE):
                     ortho_snap=self.v_ortho.get(),
                     auto_scale=self.v_autoscale.get(),
                     flag_review=self.v_review.get(),
+                    deep_clean=self.v_clean.get(),
                     min_line_px=self._float(self.e_minline, 6.0),
                     speck_px=int(self._float(self.e_speck, 8)),
                     log=self._log)

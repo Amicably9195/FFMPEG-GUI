@@ -117,6 +117,35 @@ def warp_to_page(gray, quad):
                                borderMode=cv2.BORDER_REPLICATE)
 
 
+def crop_to_page(gray):
+    """Fallback page finder: crop to the largest bright (paper) region.
+    Cuts away desks, keyboards and backdrop when the quad detector fails."""
+    blur = cv2.GaussianBlur(gray, (0, 0), 5)
+    _, bright = cv2.threshold(blur, 0, 255,
+                              cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    n, _, stats, _ = cv2.connectedComponentsWithStats(bright, connectivity=8)
+    if n < 2:
+        return gray, False
+    i = 1 + int(np.argmax(stats[1:, 4]))
+    x, y, w, h, area = stats[i]
+    if area < 0.30 * gray.size or w * h > 0.97 * gray.size:
+        return gray, False
+    pad = 5
+    y0, x0 = max(0, y - pad), max(0, x - pad)
+    y1 = min(gray.shape[0], y + h + pad)
+    x1 = min(gray.shape[1], x + w + pad)
+    return gray[y0:y1, x0:x1], True
+
+
+def speckle_ratio(ink):
+    """Fraction of ink components that are tiny specks - a dirtiness score."""
+    n, _, stats, _ = cv2.connectedComponentsWithStats(ink, connectivity=8)
+    if n <= 1:
+        return 0.0, 0
+    areas = stats[1:, 4]
+    return float((areas < 20).sum()) / len(areas), len(areas)
+
+
 def estimate_skew(gray):
     """Dominant rotation (deg) of the linework away from horizontal/vertical."""
     edges = cv2.Canny(gray, 50, 150)
@@ -151,10 +180,11 @@ def rotate_bound(gray, angle):
                           flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
 
 
-def binarize(gray):
-    """Return ink mask: 255 where there is ink, 0 for paper."""
+def binarize(gray, sensitivity=15):
+    """Return ink mask: 255 where there is ink, 0 for paper.
+    Lower sensitivity catches fainter lines (and more noise)."""
     thr = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                cv2.THRESH_BINARY_INV, 35, 15)
+                                cv2.THRESH_BINARY_INV, 35, sensitivity)
     return thr
 
 
@@ -550,6 +580,7 @@ def convert(input_path, output_path=None, *,
             ortho_snap=True,
             auto_scale=True,
             flag_review=True,
+            deep_clean=True,
             review_conf=70,
             min_line_px=6.0,
             speck_px=8,
@@ -564,11 +595,14 @@ def convert(input_path, output_path=None, *,
 
     if do_page_crop:
         quad = find_page_quad(gray)
-        if quad is not None:
-            warped = warp_to_page(gray, quad)
-            if warped is not None:
-                gray = warped
-                log("Page detected - cropped and perspective-corrected.")
+        warped = warp_to_page(gray, quad) if quad is not None else None
+        if warped is not None:
+            gray = warped
+            log("Page detected - cropped and perspective-corrected.")
+        else:
+            gray, cropped = crop_to_page(gray)
+            if cropped:
+                log("Cropped to the paper region.")
 
     gray = flatten_lighting(gray)
 
@@ -579,6 +613,22 @@ def convert(input_path, output_path=None, *,
             log(f"Deskewed by {angle:+.2f} degrees.")
 
     ink = binarize(gray)
+    if deep_clean:
+        # dirty scans (old photocopies, blueprints): salt-and-pepper grain
+        # shows up as thousands of tiny ink specks - median-filter it away
+        # and raise the noise floors before vectorizing
+        for ksize in (3, 5):
+            ratio, ncomp = speckle_ratio(ink)
+            if ratio < 0.55 or ncomp < 1500:
+                break
+            log(f"Dirty scan detected ({ncomp} specks) - "
+                f"deep cleaning (median {ksize}x{ksize}) ...")
+            gray = cv2.medianBlur(gray, ksize)
+            # median filtering killed the grain, so we can afford a more
+            # sensitive threshold that keeps faint/faded linework
+            ink = binarize(gray, sensitivity=9)
+            speck_px = max(speck_px, 24)
+            min_line_px = max(min_line_px, 12.0)
     ink = remove_specks_and_blobs(ink, min_area=speck_px)
 
     words = []
@@ -690,6 +740,8 @@ def main():
                     help="don't verify dimensions / auto-scale output to feet")
     ap.add_argument("--no-review", action="store_true",
                     help="don't flag uncertain text on the TEXT_REVIEW layer")
+    ap.add_argument("--no-clean", action="store_true",
+                    help="don't auto deep-clean dirty scans")
     ap.add_argument("--review-conf", type=float, default=70,
                     help="OCR confidence below this is flagged (default 70)")
     ap.add_argument("--min-line", type=float, default=6.0,
@@ -709,6 +761,7 @@ def main():
             ortho_snap=not args.no_ortho,
             auto_scale=not args.no_autoscale,
             flag_review=not args.no_review,
+            deep_clean=not args.no_clean,
             review_conf=args.review_conf,
             min_line_px=args.min_line,
             speck_px=args.speck)

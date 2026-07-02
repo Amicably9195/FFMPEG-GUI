@@ -7,6 +7,19 @@ print, etc.) and converts it into a **DXF** file with real CAD geometry:
 - **CURVES** layer — traced curves, symbols, thick strokes
 - **TEXT** layer — OCRed text placed where it appears on the drawing,
   including vertical/rotated labels
+- **TEXT_REVIEW** layer (red) — text the OCR was *not* sure about, boxed on
+  the drawing so a human can find and double-check every uncertain spot
+
+It also understands dimensions: labels like `40.00'`, `5'-6"`, `±15'` are
+parsed into feet and cross-checked against the drawn line they measure. When
+at least three independent dimensions agree, the scale is locked and **the
+DXF comes out in real feet** — measure the 40.00' lot line in CAD and it
+reads 40.00. Dimensions that contradict the consensus scale (usually an OCR
+misread) are flagged red for review.
+
+Dirty scans (old photocopies, blueprints, faxes) are detected automatically
+by their speckle grain and get a deep-clean pass: median filtering, a more
+sensitive threshold for faint lines, and higher noise floors.
 
 DXF opens directly in **AutoCAD** and **MicroStation** (in MicroStation just
 open the .dxf and *Save As* .dgn if you want a native file). Everything is on
@@ -36,6 +49,9 @@ Options:
 | OCR text | Reads the text (needs Tesseract, see below) |
 | Trace curves | Vectorizes curved/round features, not just straight lines |
 | Snap lines to axis | Makes almost-horizontal/vertical lines exactly horizontal/vertical |
+| Auto-scale to feet | Verifies dimensions against drawn lines and outputs the DXF in feet |
+| Flag uncertain text | Puts low-confidence OCR on the red TEXT_REVIEW layer, boxed |
+| Deep-clean dirty scans | Auto-detects speckled photocopies and scrubs them before vectorizing |
 | Units per pixel | Scale factor for the output coordinates |
 | Min line / specks | Noise filtering — raise these for dirty scans |
 
