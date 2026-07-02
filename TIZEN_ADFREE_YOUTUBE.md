@@ -25,6 +25,7 @@ This is the reliable path. Writing a YouTube client from scratch isn't practical
 
 1. Download the **TizenBrew Installer** for your OS from the TizenBrew GitHub releases page: <https://github.com/reisxd/TizenBrew>
 2. Run it, enter the TV's IP address, and let it connect and install. It handles the certificate/signing dance that would otherwise require Tizen Studio.
+3. **On Tizen 7 or newer** (2023+ TVs, including the 2024 DU-series): the installer will prompt you to **sign in with a Samsung account** to create a Samsung certificate — follow the on-screen instructions. Use the same Samsung account that's signed in on the TV.
 
 ## Step 4 — Launch TizenTube
 
