@@ -264,7 +264,7 @@ def _overlap(a, b):
     return inter / union if union else 0.0
 
 
-def ocr_words(gray, min_conf=45, vertical=True):
+def ocr_words(gray, min_conf=30, vertical=True):
     """OCR horizontal text plus (optionally) both vertical orientations,
     de-duplicated by box overlap keeping the higher-confidence read."""
     words = _ocr_pass(gray, None, 0, min_conf)
@@ -305,6 +305,10 @@ def parse_dimension(text):
     m = re.fullmatch(r"[±+\-]?(\d{1,3}(?:\.\d+)?)\"[NSEWnsew]?", t)
     if m:
         inches = float(m.group(1))
+        if inches > 12 and "." in m.group(1):
+            # 40.00" is a misread foot mark - nobody writes 40 inches
+            # with two decimals on a drawing
+            return inches
         return inches / 12.0 if inches > 0 else None
     return None
 
@@ -326,7 +330,7 @@ def _point_seg_dist(px, py, seg):
     return math.hypot(px - (x1 + t * dx), py - (y1 + t * dy))
 
 
-def estimate_scale(words, segs, tolerance=0.10):
+def estimate_scale(words, segs, tolerance=0.05, extra_segs=None):
     """Cross-check parsed dimensions against nearby drawn lines.
 
     Each dimension label paired with the line it measures implies a scale
@@ -340,9 +344,13 @@ def estimate_scale(words, segs, tolerance=0.10):
     dims = [w for w in words if _verifiable(w)]
     if len(dims) < 3 or len(segs) < 1:
         return None
-    # measurement geometry: re-merge with a generous gap so lines broken by
-    # crossings (a walk cutting a lot line in two) read as their full length
-    meas = merge_segments(segs, gap_tol=40.0)
+    # measurement geometry: the merged display lines plus edge-detected
+    # segments (which see bold property lines as single pieces). The pool
+    # must stay SPARSE - with too many candidate spans every label matches
+    # any scale and the consensus is meaningless.
+    meas = segs
+    if extra_segs is not None and len(extra_segs):
+        meas = np.vstack([meas, extra_segs]) if len(meas) else extra_segs
     if len(meas) == 0:
         return None
     mlen = np.hypot(meas[:, 2] - meas[:, 0], meas[:, 3] - meas[:, 1])
@@ -352,8 +360,8 @@ def estimate_scale(words, segs, tolerance=0.10):
     cands = []  # (word index, implied ft/px, distance to line)
     for wi, w in enumerate(dims):
         cx, cy = w["x"] + w["w"] / 2.0, w["y"] + w["h"] / 2.0
+        c = np.array([cx, cy])
         vertical = w["rotation"] in (90, 270)
-        radius = 4.0 * w["cap"] + max(w["w"], w["h"])
         for i in range(len(meas)):
             if mlen[i] < 30:
                 continue
@@ -361,22 +369,39 @@ def estimate_scale(words, segs, tolerance=0.10):
                      (mang[i] < 20 or mang[i] > 160)
             if not ang_ok:
                 continue
-            d = _point_seg_dist(cx, cy, meas[i])
-            if d > radius:
+            # a dimension label sits centered on the span it measures:
+            # require the label over the middle of the span and close to it
+            a = meas[i, :2]
+            d = (meas[i, 2:] - a) / mlen[i]
+            n = np.array([-d[1], d[0]])
+            # the label must sit somewhere along the span (corner labels sit
+            # right at the end, so allow slight overhang)
+            frac = float((c - a) @ d) / mlen[i]
+            if not -0.10 <= frac <= 1.10:
                 continue
-            cands.append((wi, w["dim"] / mlen[i], d))
+            # surveys often write the value well off the measured line, so
+            # allow real offset
+            perp = abs(float((c - a) @ n))
+            if perp > max(8.0 * w["cap"], 150.0):
+                continue
+            cands.append((wi, w["dim"] / mlen[i], perp))
     if not cands:
         return None
 
-    # densest cluster of implied scales, ranked by distinct supporting words
+    # densest cluster of implied scales; rank by distinct supporting words,
+    # then by total feet of evidence (the principal 40'/100' lot lines must
+    # outweigh a coincidental cluster of small offset labels)
     best_score, best_members = None, None
     for _, s0, _ in cands:
         members = [c for c in cands if abs(c[1] / s0 - 1.0) <= tolerance]
-        support = len({c[0] for c in members})
-        score = (support, -min(c[2] for c in members))
+        support = {c[0] for c in members}
+        feet = sum(dims[i]["dim"] for i in support)
+        score = (len(support), feet, -min(c[2] for c in members))
         if best_score is None or score > best_score:
             best_score, best_members = score, members
-    if len({c[0] for c in best_members}) < 3:
+    support = {c[0] for c in best_members}
+    feet = sum(dims[i]["dim"] for i in support)
+    if len(support) < 3 and not (len(support) >= 2 and feet >= 60):
         return None
     scale = float(np.median([c[1] for c in best_members]))
 
@@ -401,6 +426,95 @@ def mask_words(ink, words, pad=2):
 
 
 # ── Vectorization ──────────────────────────────────────────────────────────────
+
+_NB = ((-1, -1), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1))
+
+
+def _trace_skeleton(skel):
+    """Walk a 1-px skeleton into pixel paths, breaking at junctions so every
+    stroke centerline becomes one path with shared junction endpoints."""
+    ys, xs = np.nonzero(skel)
+    pts = set(zip(xs.tolist(), ys.tolist()))
+
+    def nbrs(p):
+        x, y = p
+        return [(x + dx, y + dy) for dx, dy in _NB if (x + dx, y + dy) in pts]
+
+    neighbors = {p: nbrs(p) for p in pts}
+    nodes = {p for p, nb in neighbors.items() if len(nb) != 2}
+    visited = set()
+    paths = []
+
+    def walk(start, nxt):
+        path = [start, nxt]
+        visited.add((start, nxt))
+        visited.add((nxt, start))
+        prev, cur = start, nxt
+        while cur not in nodes:
+            steps = [q for q in neighbors[cur]
+                     if q != prev and (cur, q) not in visited]
+            if not steps:
+                break
+            q = steps[0]
+            visited.add((cur, q))
+            visited.add((q, cur))
+            path.append(q)
+            prev, cur = cur, q
+        return path
+
+    for n in nodes:
+        for m in neighbors[n]:
+            if (n, m) not in visited:
+                paths.append(walk(n, m))
+    # closed loops with no junctions (circles): walk from any leftover pixel
+    for p in pts:
+        if len(neighbors[p]) == 2 and \
+                all((p, q) not in visited for q in neighbors[p]):
+            paths.append(walk(p, neighbors[p][0]))
+    return paths
+
+
+def vectorize_centerlines(ink, min_len=6.0, epsilon=1.4):
+    """Thin ink to 1-px skeletons and trace single centerlines: one stroke on
+    paper -> one LINE / one polyline, no doubled edges, no outlines.
+    Returns (segments Nx4, list of (points Nx2, closed))."""
+    skel = cv2.ximgproc.thinning(ink)
+    segments, polys = [], []
+    for path in _trace_skeleton(skel):
+        if len(path) < 2:
+            continue
+        arr = np.asarray(path, dtype=np.int32).reshape(-1, 1, 2)
+        closed = path[0] == path[-1] and len(path) > 3
+        approx = cv2.approxPolyDP(arr, epsilon, closed).reshape(-1, 2)
+        if closed and len(approx) >= 3:
+            polys.append((approx.astype(np.float64), True))
+            continue
+        if len(approx) == 2:
+            (x1, y1), (x2, y2) = approx
+            segments.append((float(x1), float(y1), float(x2), float(y2)))
+        elif len(approx) > 2:
+            # near-straight paths become dead-straight lines: these drawings
+            # came out of CAD, so a long stroke bowed slightly by paper curl
+            # or lens distortion is meant to be straight
+            p1, p2 = approx[0].astype(np.float64), approx[-1].astype(np.float64)
+            chord = np.linalg.norm(p2 - p1)
+            dev = 0.0
+            if chord > 1:
+                d = (p2 - p1) / chord
+                n = np.array([-d[1], d[0]])
+                dev = float(np.max(np.abs((approx - p1) @ n)))
+            if chord >= min_len and dev <= max(2.5, 0.015 * chord):
+                segments.append((p1[0], p1[1], p2[0], p2[1]))
+            else:
+                polys.append((approx.astype(np.float64), False))
+    return (np.array(segments) if segments else np.empty((0, 4))), polys
+
+
+def _feature_size(points):
+    lo = points.min(axis=0)
+    hi = points.max(axis=0)
+    return float(np.hypot(*(hi - lo)))
+
 
 def detect_segments(ink):
     """Straight line segments (N x 4 array of x1,y1,x2,y2) from the ink mask."""
@@ -533,6 +647,8 @@ def write_dxf(path, img_h, segments, curves, words, scale=1.0,
     doc.layers.add("TEXT_REVIEW", color=1)  # red: uncertain, check by hand
     if units_feet:
         doc.header["$INSUNITS"] = 2  # feet
+    # a real font instead of the default stick font
+    doc.styles.add("D2CAD", font="arial.ttf")
     msp = doc.modelspace()
 
     def pt(x, y):
@@ -554,6 +670,7 @@ def write_dxf(path, img_h, segments, curves, words, scale=1.0,
         layer = "TEXT_REVIEW" if wd.get("review") else "TEXT"
         msp.add_text(wd["text"], dxfattribs={
             "layer": layer,
+            "style": "D2CAD",
             "height": height,
             "rotation": wd["rotation"],
             "insert": pt(*wd["insert"]),
@@ -584,7 +701,7 @@ def convert(input_path, output_path=None, *,
             review_conf=70,
             min_line_px=6.0,
             speck_px=8,
-            ocr_min_conf=45,
+            ocr_min_conf=30,
             log=print):
     """Run the whole image -> DXF pipeline. Returns a stats dict."""
     if output_path is None:
@@ -612,6 +729,8 @@ def convert(input_path, output_path=None, *,
             gray = rotate_bound(gray, angle)
             log(f"Deskewed by {angle:+.2f} degrees.")
 
+    gray_ocr = gray  # OCR always reads the sharp image; median filtering
+    # below is for linework only and would soften the letters
     ink = binarize(gray)
     if deep_clean:
         # dirty scans (old photocopies, blueprints): salt-and-pepper grain
@@ -635,7 +754,7 @@ def convert(input_path, output_path=None, *,
     if do_ocr:
         if find_tesseract():
             log("Running OCR (horizontal + vertical passes) ...")
-            words = ocr_words(gray, min_conf=ocr_min_conf)
+            words = ocr_words(gray_ocr, min_conf=ocr_min_conf)
             log(f"OCR found {len(words)} words.")
         else:
             log("WARNING: Tesseract not found - skipping OCR. "
@@ -643,35 +762,49 @@ def convert(input_path, output_path=None, *,
 
     line_img = mask_words(ink, words) if words else ink
 
-    log("Detecting line segments ...")
-    segs = detect_segments(line_img)
-    log(f"  {len(segs)} raw segments.")
-    width = stroke_width(line_img)
+    log("Tracing stroke centerlines ...")
+    try:
+        segs, curves = vectorize_centerlines(line_img, min_len=min_line_px)
+    except (AttributeError, cv2.error):
+        # opencv build without ximgproc: fall back to edge-based detection
+        segs = detect_segments(line_img)
+        width = stroke_width(line_img)
+        curves = residual_curves(line_img, segs, width) if do_curves else []
+    log(f"  {len(segs)} strokes, {len(curves)} curved paths.")
     if ortho_snap and len(segs):
         segs = snap_orthogonal(segs)
     if len(segs):
-        # offset tolerance ~ stroke width so the two edges of one pen stroke
-        # collapse into a single centerline
-        segs = merge_segments(segs, offset_tol=max(2.5, width + 1.0))
-        log(f"  {len(segs)} after merging.")
+        segs = merge_segments(segs, gap_tol=6.0)
+        log(f"  {len(segs)} lines after merging.")
+    if not do_curves:
+        curves = []
+    # unreadable letter-sized squiggles render as confetti in CAD - drop them
+    # (closed loops get a lower bar: small circles are real symbols)
+    curves = [c for c in curves
+              if _feature_size(c[0]) >= (18.0 if c[1] else 35.0)]
 
-    curves = []
-    if do_curves and len(segs):
-        curves = residual_curves(line_img, segs, width)
-        log(f"  {len(curves)} curve/symbol outlines traced.")
-
-    # dimension parsing, scale verification and review flagging
+    # dimension parsing, junk filtering, scale verification, review flagging
     units_feet = False
     for wd in words:
         wd["dim"] = parse_dimension(wd["text"])
         if flag_review and wd["conf"] < review_conf:
             wd["review"] = True
+    # words below this confidence are 90% noise unless they parse as a
+    # dimension - they were still masked out of the linework above, but
+    # they don't belong in the drawing as text
+    words = [w for w in words
+             if w["dim"] or (w["conf"] >= 55 and
+                             not (len(w["text"]) == 1 and w["conf"] < 70))]
     n_dims = sum(1 for w in words if w["dim"])
     if n_dims:
         log(f"Parsed {n_dims} dimension labels "
             f"({', '.join(w['text'] for w in words if w['dim'])}).")
     if auto_scale and n_dims:
-        ftpx = estimate_scale(words, segs)
+        try:
+            lsd_segs = detect_segments(line_img)
+        except cv2.error:
+            lsd_segs = None
+        ftpx = estimate_scale(words, segs, extra_segs=lsd_segs)
         checked = [w for w in words if "dim_ok" in w]
         bad = [w for w in checked if not w["dim_ok"]]
         if flag_review:

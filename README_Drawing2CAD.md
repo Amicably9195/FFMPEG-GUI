@@ -65,7 +65,7 @@ python scan2cad.py --help          # all options
 ## Install
 
 ```
-pip install customtkinter tkinterdnd2 opencv-python-headless numpy ezdxf pytesseract pillow
+pip install customtkinter tkinterdnd2 opencv-contrib-python-headless numpy ezdxf pytesseract pillow
 ```
 
 For OCR you also need the **Tesseract** engine itself:
