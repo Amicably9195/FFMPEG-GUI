@@ -36,7 +36,10 @@ text layer in one click.
 python drawing2cad_gui.py
 ```
 
-1. **Add images** (or drag & drop) — JPG/PNG/TIFF scans or phone photos.
+1. **Add files** (or drag & drop) — JPG/PNG/TIFF scans, phone photos, or **PDFs**.
+   Vector PDFs (CAD e-filings) are lifted exactly — perfect lines and text, no
+   OCR. Scanned PDFs go through the photo pipeline at native scan resolution.
+   Multi-page PDFs produce one DXF per page.
 2. Leave the default options on and hit **Convert to DXF**.
 3. The .dxf is saved next to each image.
 
@@ -65,7 +68,7 @@ python scan2cad.py --help          # all options
 ## Install
 
 ```
-pip install customtkinter tkinterdnd2 opencv-contrib-python-headless numpy ezdxf pytesseract pillow
+pip install customtkinter tkinterdnd2 opencv-contrib-python-headless numpy ezdxf pytesseract pillow pymupdf
 ```
 
 For OCR you also need the **Tesseract** engine itself:

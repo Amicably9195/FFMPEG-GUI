@@ -31,7 +31,8 @@ BORDER  = "#2E2E2E"; TEXT    = "#F0EDE8"
 MUTED   = "#888480"; GREEN   = "#4CAF50"
 YELLOW  = "#FFC107"; RED     = "#E85454"
 
-IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp")
+IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp",
+              ".pdf")
 
 
 class Drawing2CADApp(_BASE):
@@ -165,8 +166,8 @@ class Drawing2CADApp(_BASE):
 
     def _pick_files(self):
         paths = filedialog.askopenfilenames(
-            title="Choose drawing photos / scans",
-            filetypes=[("Images", " ".join("*" + e for e in IMAGE_EXTS)),
+            title="Choose drawing photos / scans / PDFs",
+            filetypes=[("Drawings", " ".join("*" + e for e in IMAGE_EXTS)),
                        ("All files", "*.*")])
         self._add_files(paths)
 

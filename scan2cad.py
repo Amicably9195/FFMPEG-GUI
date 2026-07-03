@@ -703,7 +703,19 @@ def convert(input_path, output_path=None, *,
             speck_px=8,
             ocr_min_conf=30,
             log=print):
-    """Run the whole image -> DXF pipeline. Returns a stats dict."""
+    """Run the whole image -> DXF pipeline. Returns a stats dict.
+    PDFs are routed to pdf2cad: vector pages are lifted exactly,
+    scanned pages come back through this pipeline at 300 DPI."""
+    if input_path.lower().endswith(".pdf"):
+        import pdf2cad
+        return pdf2cad.convert_pdf(
+            input_path, output_path, log=log, scale=scale,
+            do_page_crop=do_page_crop, do_deskew=do_deskew, do_ocr=do_ocr,
+            do_curves=do_curves, ortho_snap=ortho_snap,
+            auto_scale=auto_scale, flag_review=flag_review,
+            deep_clean=deep_clean, review_conf=review_conf,
+            min_line_px=min_line_px, speck_px=speck_px,
+            ocr_min_conf=ocr_min_conf)
     if output_path is None:
         output_path = os.path.splitext(input_path)[0] + ".dxf"
 
@@ -857,7 +869,7 @@ def render_preview(dxf_path, png_path, dpi=150):
 def main():
     ap = argparse.ArgumentParser(
         description="Convert a photo/scan of a drawing to a layered DXF.")
-    ap.add_argument("input", help="input image (jpg/png/tif...)")
+    ap.add_argument("input", help="input image (jpg/png/tif...) or PDF")
     ap.add_argument("-o", "--output", help="output .dxf path")
     ap.add_argument("--scale", type=float, default=1.0,
                     help="drawing units per pixel (default 1.0)")
