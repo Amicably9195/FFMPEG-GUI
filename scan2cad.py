@@ -219,17 +219,20 @@ def stroke_width(ink):
 
 def _ocr_pass(gray, rotate_code, cad_rotation, min_conf):
     """One tesseract pass; boxes mapped back to the un-rotated frame.
-    Each word: dict(text, conf, x, y, w, h  [orig frame px],
-                    insert (px point), rotation [deg CAD])."""
+    Words on the same OCR line are grouped into one label (a drafter writes
+    'LOWER CONCRETE YARD' as one clean label, not three stacked words);
+    dimension values stay solo so they can be verified individually.
+    Each label: dict(text, conf, x, y, w, h  [orig frame px],
+                     insert (px point), rotation [deg CAD])."""
     h0, w0 = gray.shape
     img = gray if rotate_code is None else cv2.rotate(gray, rotate_code)
     data = pytesseract.image_to_data(img, config="--psm 11",
                                      output_type=pytesseract.Output.DICT)
-    words = []
+    raw = []
     for i, text in enumerate(data["text"]):
         text = text.strip()
         conf = float(data["conf"][i])
-        if not text or conf < min_conf:
+        if not text or conf < 0:
             continue
         if not any(ch.isalnum() for ch in text):
             continue
@@ -237,7 +240,35 @@ def _ocr_pass(gray, rotate_code, cad_rotation, min_conf):
         w, h = data["width"][i], data["height"][i]
         if h < 6 or h > 200 or w < 3:
             continue
-        # Map box corners and reading-orientation baseline point back to the
+        raw.append((
+            (data["block_num"][i], data["par_num"][i], data["line_num"][i]),
+            data["word_num"][i], x, y, w, h, text, conf))
+    raw.sort(key=lambda r: (r[0], r[1]))
+
+    groups, run, run_key = [], [], None
+    for key, _, x, y, w, h, text, conf in raw:
+        is_dim = parse_dimension(text) is not None
+        gap = run and (x - (run[-1][0] + run[-1][2])) > 1.5 * max(h, run[-1][3])
+        if run and (key != run_key or is_dim or run[-1][6] or gap):
+            groups.append(run)
+            run = []
+        run.append((x, y, w, h, text, conf, is_dim))
+        run_key = key
+    if run:
+        groups.append(run)
+
+    words = []
+    for g in groups:
+        conf = min(m[5] for m in g)
+        if conf < min_conf:
+            continue
+        text = " ".join(m[4] for m in g)
+        x = min(m[0] for m in g)
+        y = min(m[1] for m in g)
+        w = max(m[0] + m[2] for m in g) - x
+        h = max(m[1] + m[3] for m in g) - y
+        cap = float(np.median([m[3] for m in g]))
+        # Map box and reading-orientation baseline point back to the
         # original frame.
         if rotate_code is None:
             bx, by, bw, bh = x, y, w, h
@@ -250,9 +281,8 @@ def _ocr_pass(gray, rotate_code, cad_rotation, min_conf):
             # orig (X,Y) -> rotated (Y, W0-1-X);  inverse: X = W0-1-y', Y = x'
             bx, by, bw, bh = w0 - 1 - y - h, x, h, w
             insert = (w0 - 1 - y - h, x)
-        # cap height is always the box height in reading orientation (h)
         words.append(dict(text=text, conf=conf, x=bx, y=by, w=bw, h=bh,
-                          insert=insert, rotation=cad_rotation, cap=h))
+                          insert=insert, rotation=cad_rotation, cap=cap))
     return words
 
 
@@ -362,8 +392,11 @@ def estimate_scale(words, segs, tolerance=0.05, extra_segs=None):
         cx, cy = w["x"] + w["w"] / 2.0, w["y"] + w["h"] / 2.0
         c = np.array([cx, cy])
         vertical = w["rotation"] in (90, 270)
+        # the measured line is always longer than the label describing it -
+        # a leftover text stroke must never pass as the measured span
+        reading_len = w["h"] if vertical else w["w"]
         for i in range(len(meas)):
-            if mlen[i] < 30:
+            if mlen[i] < max(30, 1.2 * reading_len):
                 continue
             ang_ok = (70 < mang[i] < 110) if vertical else \
                      (mang[i] < 20 or mang[i] > 160)
@@ -388,20 +421,25 @@ def estimate_scale(words, segs, tolerance=0.05, extra_segs=None):
     if not cands:
         return None
 
-    # densest cluster of implied scales; rank by distinct supporting words,
-    # then by total feet of evidence (the principal 40'/100' lot lines must
-    # outweigh a coincidental cluster of small offset labels)
+    # densest cluster of implied scales; rank by total feet of evidence
+    # first - the principal lot lines (40' + 100') must outweigh any
+    # coincidental cluster of small offset labels - then by supporting
+    # word count and proximity
     best_score, best_members = None, None
     for _, s0, _ in cands:
         members = [c for c in cands if abs(c[1] / s0 - 1.0) <= tolerance]
         support = {c[0] for c in members}
+        if len(support) < 2:
+            continue
         feet = sum(dims[i]["dim"] for i in support)
-        score = (len(support), feet, -min(c[2] for c in members))
+        score = (feet, len(support), -min(c[2] for c in members))
         if best_score is None or score > best_score:
             best_score, best_members = score, members
+    if best_members is None:
+        return None
     support = {c[0] for c in best_members}
     feet = sum(dims[i]["dim"] for i in support)
-    if len(support) < 3 and not (len(support) >= 2 and feet >= 60):
+    if len(support) < 3 and feet < 60:
         return None
     scale = float(np.median([c[1] for c in best_members]))
 
@@ -644,7 +682,9 @@ def write_dxf(path, img_h, segments, curves, words, scale=1.0,
     doc.layers.add("LINES", color=7)
     doc.layers.add("CURVES", color=4)
     doc.layers.add("TEXT", color=3)
-    doc.layers.add("TEXT_REVIEW", color=1)  # red: uncertain, check by hand
+    # uncertain text lives on a hidden layer: the drawing opens clean, and
+    # turning TEXT_REVIEW on shows the red marks for proofreading
+    doc.layers.add("TEXT_REVIEW", color=1).off()
     if units_feet:
         doc.header["$INSUNITS"] = 2  # feet
     # a real font instead of the default stick font
@@ -793,7 +833,7 @@ def convert(input_path, output_path=None, *,
     # unreadable letter-sized squiggles render as confetti in CAD - drop them
     # (closed loops get a lower bar: small circles are real symbols)
     curves = [c for c in curves
-              if _feature_size(c[0]) >= (18.0 if c[1] else 35.0)]
+              if _feature_size(c[0]) >= (18.0 if c[1] else 50.0)]
 
     # dimension parsing, junk filtering, scale verification, review flagging
     units_feet = False

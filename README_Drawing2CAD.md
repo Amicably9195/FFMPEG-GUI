@@ -7,8 +7,9 @@ print, etc.) and converts it into a **DXF** file with real CAD geometry:
 - **CURVES** layer — traced curves, symbols, thick strokes
 - **TEXT** layer — OCRed text placed where it appears on the drawing,
   including vertical/rotated labels
-- **TEXT_REVIEW** layer (red) — text the OCR was *not* sure about, boxed on
-  the drawing so a human can find and double-check every uncertain spot
+- **TEXT_REVIEW** layer (red, **hidden by default**) — text the OCR was *not*
+  sure about, boxed on the drawing. The file opens clean; turn this layer on
+  in CAD when you want to proofread the uncertain spots
 
 It also understands dimensions: labels like `40.00'`, `5'-6"`, `±15'` are
 parsed into feet and cross-checked against the drawn line they measure. When
