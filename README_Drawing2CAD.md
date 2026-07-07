@@ -18,13 +18,11 @@ DXF comes out in real feet** — measure the 40.00' lot line in CAD and it
 reads 40.00. Dimensions that contradict the consensus scale (usually an OCR
 misread) are flagged red for review.
 
-**AI text reading (recommended):** with an Anthropic API key, every label
-Tesseract locates is re-read by Claude's vision — which actually understands
-what is written. It reads drafting lettering, fixes misread foot marks from
-context, and discards scribbles. Costs a few cents per drawing. Get a key at
-https://platform.claude.com/ and either set the `ANTHROPIC_API_KEY`
-environment variable or paste it into the GUI (saved locally). Without a
-key the converter falls back to plain Tesseract text.
+**Smart text reading (free, offline):** every label Tesseract locates gets
+a second opinion from RapidOCR, an open-source neural text reader bundled
+with the app — no account, no API, no internet, no cost. The smarter read
+only wins when it is clearly more confident than Tesseract's, so it can
+rescue hard labels but never degrade good ones.
 
 Dirty scans (old photocopies, blueprints, faxes) are detected automatically
 by their speckle grain and get a deep-clean pass: median filtering, a more
@@ -77,7 +75,15 @@ python scan2cad.py --help          # all options
 ## Install
 
 ```
-pip install customtkinter tkinterdnd2 opencv-contrib-python-headless numpy ezdxf pytesseract pillow pymupdf anthropic
+pip install customtkinter tkinterdnd2 numpy ezdxf pytesseract pillow pymupdf rapidocr_onnxruntime
+pip uninstall -y opencv-python opencv-python-headless
+pip install --force-reinstall --no-deps opencv-contrib-python-headless
+```
+
+(The last two lines matter: RapidOCR pulls in plain OpenCV, which must be
+replaced by the contrib build or line tracing quality drops.)
+
+```
 ```
 
 For OCR you also need the **Tesseract** engine itself:

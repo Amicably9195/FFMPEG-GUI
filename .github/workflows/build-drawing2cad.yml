@@ -16,7 +16,10 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install pyinstaller customtkinter tkinterdnd2 opencv-contrib-python-headless numpy ezdxf pytesseract pillow pymupdf anthropic
+        run: |
+          pip install pyinstaller customtkinter tkinterdnd2 numpy ezdxf pytesseract pillow pymupdf rapidocr_onnxruntime
+          pip uninstall -y opencv-python opencv-python-headless
+          pip install --force-reinstall --no-deps opencv-contrib-python-headless
 
       - name: Build exe
         run: pyinstaller Drawing2CAD.spec

@@ -129,25 +129,12 @@ class Drawing2CADApp(_BASE):
 
         orow3 = ctk.CTkFrame(opts, fg_color=BG_CARD)
         orow3.pack(fill="x", padx=10, pady=(0, 10))
-        self.v_ai = tk.BooleanVar(value=True)
-        ctk.CTkCheckBox(orow3, text="AI text reading (Claude)",
-                        variable=self.v_ai, fg_color=ACCENT,
+        self.v_smart = tk.BooleanVar(value=True)
+        ctk.CTkCheckBox(orow3,
+                        text="Smart text reading (free, runs on this PC)",
+                        variable=self.v_smart, fg_color=ACCENT,
                         hover_color=ACCENT2,
                         font=("Segoe UI", 12)).pack(side="left", padx=8)
-        ctk.CTkLabel(orow3, text="Anthropic API key:", text_color=MUTED,
-                     font=("Segoe UI", 12)).pack(side="left", padx=(14, 4))
-        self.e_ai_key = ctk.CTkEntry(orow3, width=260, show="*",
-                                     fg_color=BG_INPUT, border_color=BORDER,
-                                     placeholder_text="sk-ant-...  (saved "
-                                     "locally after first convert)")
-        try:
-            import ai_ocr
-            saved = ai_ocr.saved_key()
-            if saved:
-                self.e_ai_key.insert(0, saved)
-        except Exception:
-            pass
-        self.e_ai_key.pack(side="left")
 
         # convert
         self.btn = ctk.CTkButton(self, text="Convert to DXF",
@@ -221,13 +208,6 @@ class Drawing2CADApp(_BASE):
         if not self.files:
             messagebox.showinfo("Drawing2CAD", "Add at least one image first.")
             return
-        key = self.e_ai_key.get().strip()
-        if key:
-            try:
-                import ai_ocr
-                ai_ocr.save_key(key)
-            except Exception:
-                pass
         self.busy = True
         self.btn.configure(state="disabled", text="Converting ...")
         threading.Thread(target=self._worker, daemon=True).start()
@@ -249,8 +229,7 @@ class Drawing2CADApp(_BASE):
                     auto_scale=self.v_autoscale.get(),
                     flag_review=self.v_review.get(),
                     deep_clean=self.v_clean.get(),
-                    ai_read=self.v_ai.get(),
-                    ai_key=self.e_ai_key.get().strip() or None,
+                    smart_read=self.v_smart.get(),
                     min_line_px=self._float(self.e_minline, 6.0),
                     speck_px=int(self._float(self.e_speck, 8)),
                     log=self._log)

@@ -3,7 +3,9 @@ from PyInstaller.utils.hooks import collect_all
 
 datas = []
 binaries = []
-hiddenimports = ['scan2cad', 'pdf2cad', 'ai_ocr', 'pytesseract', 'ezdxf', 'anthropic']
+hiddenimports = ['scan2cad', 'pdf2cad', 'smart_ocr', 'pytesseract', 'ezdxf']
+tmp_ret = collect_all('rapidocr_onnxruntime')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('pymupdf')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('customtkinter')

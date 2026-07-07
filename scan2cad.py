@@ -360,7 +360,8 @@ def _point_seg_dist(px, py, seg):
     return math.hypot(px - (x1 + t * dx), py - (y1 + t * dy))
 
 
-def estimate_scale(words, segs, tolerance=0.05, extra_segs=None):
+def estimate_scale(words, segs, tolerance=0.06, extra_segs=None,
+                   img_shape=None):
     """Cross-check parsed dimensions against nearby drawn lines.
 
     Each dimension label paired with the line it measures implies a scale
@@ -384,6 +385,18 @@ def estimate_scale(words, segs, tolerance=0.05, extra_segs=None):
     if len(meas) == 0:
         return None
     mlen = np.hypot(meas[:, 2] - meas[:, 0], meas[:, 3] - meas[:, 1])
+    if img_shape is not None:
+        # the sheet border frame is not drawing geometry - long lines
+        # hugging the image edge must not pair with dimension labels
+        h, w = img_shape[:2]
+        mx = (meas[:, 0] + meas[:, 2]) / 2
+        my = (meas[:, 1] + meas[:, 3]) / 2
+        near_edge = ((mx < 0.04 * w) | (mx > 0.96 * w) |
+                     (my < 0.04 * h) | (my > 0.96 * h))
+        keep = ~(near_edge & (mlen > 0.5 * min(h, w)))
+        meas, mlen = meas[keep], mlen[keep]
+    if len(meas) == 0:
+        return None
     mang = np.degrees(np.arctan2(meas[:, 3] - meas[:, 1],
                                  meas[:, 2] - meas[:, 0])) % 180.0
 
@@ -425,7 +438,7 @@ def estimate_scale(words, segs, tolerance=0.05, extra_segs=None):
     # first - the principal lot lines (40' + 100') must outweigh any
     # coincidental cluster of small offset labels - then by supporting
     # word count and proximity
-    best_score, best_members = None, None
+    clusters = []
     for _, s0, _ in cands:
         members = [c for c in cands if abs(c[1] / s0 - 1.0) <= tolerance]
         support = {c[0] for c in members}
@@ -433,10 +446,17 @@ def estimate_scale(words, segs, tolerance=0.05, extra_segs=None):
             continue
         feet = sum(dims[i]["dim"] for i in support)
         score = (feet, len(support), -min(c[2] for c in members))
-        if best_score is None or score > best_score:
-            best_score, best_members = score, members
-    if best_members is None:
+        clusters.append((score, s0, members))
+    if not clusters:
         return None
+    clusters.sort(key=lambda t: t[0], reverse=True)
+    best_score, best_s0, best_members = clusters[0]
+    # honesty check: if a second, scale-incompatible cluster has comparable
+    # evidence, the drawing is ambiguous - better no scale than a wrong one
+    for score, s0, _ in clusters[1:]:
+        if abs(s0 / best_s0 - 1.0) > 3 * tolerance and \
+                score[0] >= 0.7 * best_score[0]:
+            return None
     support = {c[0] for c in best_members}
     feet = sum(dims[i]["dim"] for i in support)
     if len(support) < 3 and feet < 60:
@@ -738,8 +758,7 @@ def convert(input_path, output_path=None, *,
             auto_scale=True,
             flag_review=True,
             deep_clean=True,
-            ai_read=True,
-            ai_key=None,
+            smart_read=True,
             review_conf=70,
             min_line_px=6.0,
             speck_px=8,
@@ -755,7 +774,7 @@ def convert(input_path, output_path=None, *,
             do_page_crop=do_page_crop, do_deskew=do_deskew, do_ocr=do_ocr,
             do_curves=do_curves, ortho_snap=ortho_snap,
             auto_scale=auto_scale, flag_review=flag_review,
-            deep_clean=deep_clean, ai_read=ai_read, ai_key=ai_key,
+            deep_clean=deep_clean, smart_read=smart_read,
             review_conf=review_conf,
             min_line_px=min_line_px, speck_px=speck_px,
             ocr_min_conf=ocr_min_conf)
@@ -814,20 +833,16 @@ def convert(input_path, output_path=None, *,
         else:
             log("WARNING: Tesseract not found - skipping OCR. "
                 "Install it or set TESSERACT_CMD.")
-        if words and ai_read:
+        if words and smart_read:
             try:
-                import ai_ocr
-                if ai_ocr.available(ai_key):
-                    log("AI text reading (Claude) - re-reading every "
-                        "label ...")
-                    n = ai_ocr.refine_words(gray_ocr, words, api_key=ai_key,
-                                            log=log)
-                    log(f"AI corrected or verified {n} labels.")
-                else:
-                    log("AI text reading skipped - no Anthropic API key "
-                        "(set ANTHROPIC_API_KEY or enter one in the GUI).")
+                import smart_ocr
+                if smart_ocr.available():
+                    log("Smart text reading (free, offline) - second "
+                        "opinion on every label ...")
+                    n = smart_ocr.refine_words(gray_ocr, words, log=log)
+                    log(f"Smart reader improved {n} labels.")
             except Exception as exc:
-                log(f"AI text reading failed ({exc}) - "
+                log(f"Smart text reading failed ({exc}) - "
                     f"keeping Tesseract text.")
 
     line_img = mask_words(ink, words) if words else ink
@@ -836,7 +851,11 @@ def convert(input_path, output_path=None, *,
     try:
         segs, curves = vectorize_centerlines(line_img, min_len=min_line_px)
     except (AttributeError, cv2.error):
-        # opencv build without ximgproc: fall back to edge-based detection
+        # opencv build without ximgproc thinning: fall back to edge-based
+        # detection (noticeably worse - doubled lines). The install must
+        # keep opencv-contrib-python-headless as the winning cv2.
+        log("WARNING: opencv-contrib missing - using lower-quality "
+            "edge tracing. Reinstall opencv-contrib-python-headless.")
         segs = detect_segments(line_img)
         width = stroke_width(line_img)
         curves = residual_curves(line_img, segs, width) if do_curves else []
@@ -874,7 +893,8 @@ def convert(input_path, output_path=None, *,
             lsd_segs = detect_segments(line_img)
         except cv2.error:
             lsd_segs = None
-        ftpx = estimate_scale(words, segs, extra_segs=lsd_segs)
+        ftpx = estimate_scale(words, segs, extra_segs=lsd_segs,
+                              img_shape=gray.shape)
         checked = [w for w in words if "dim_ok" in w]
         bad = [w for w in checked if not w["dim_ok"]]
         if flag_review:
@@ -945,10 +965,9 @@ def main():
                     help="don't flag uncertain text on the TEXT_REVIEW layer")
     ap.add_argument("--no-clean", action="store_true",
                     help="don't auto deep-clean dirty scans")
-    ap.add_argument("--no-ai", action="store_true",
-                    help="don't re-read text with the Claude API")
-    ap.add_argument("--ai-key", help="Anthropic API key for AI text reading "
-                    "(default: ANTHROPIC_API_KEY env or saved key)")
+    ap.add_argument("--no-smart", action="store_true",
+                    help="don't re-read labels with the offline neural "
+                         "reader")
     ap.add_argument("--review-conf", type=float, default=70,
                     help="OCR confidence below this is flagged (default 70)")
     ap.add_argument("--min-line", type=float, default=6.0,
@@ -969,8 +988,7 @@ def main():
             auto_scale=not args.no_autoscale,
             flag_review=not args.no_review,
             deep_clean=not args.no_clean,
-            ai_read=not args.no_ai,
-            ai_key=args.ai_key,
+            smart_read=not args.no_smart,
             review_conf=args.review_conf,
             min_line_px=args.min_line,
             speck_px=args.speck)
