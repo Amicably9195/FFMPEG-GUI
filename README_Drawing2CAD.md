@@ -18,6 +18,14 @@ DXF comes out in real feet** — measure the 40.00' lot line in CAD and it
 reads 40.00. Dimensions that contradict the consensus scale (usually an OCR
 misread) are flagged red for review.
 
+**AI text reading (recommended):** with an Anthropic API key, every label
+Tesseract locates is re-read by Claude's vision — which actually understands
+what is written. It reads drafting lettering, fixes misread foot marks from
+context, and discards scribbles. Costs a few cents per drawing. Get a key at
+https://platform.claude.com/ and either set the `ANTHROPIC_API_KEY`
+environment variable or paste it into the GUI (saved locally). Without a
+key the converter falls back to plain Tesseract text.
+
 Dirty scans (old photocopies, blueprints, faxes) are detected automatically
 by their speckle grain and get a deep-clean pass: median filtering, a more
 sensitive threshold for faint lines, and higher noise floors.
@@ -69,7 +77,7 @@ python scan2cad.py --help          # all options
 ## Install
 
 ```
-pip install customtkinter tkinterdnd2 opencv-contrib-python-headless numpy ezdxf pytesseract pillow pymupdf
+pip install customtkinter tkinterdnd2 opencv-contrib-python-headless numpy ezdxf pytesseract pillow pymupdf anthropic
 ```
 
 For OCR you also need the **Tesseract** engine itself:

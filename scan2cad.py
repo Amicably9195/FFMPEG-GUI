@@ -738,6 +738,8 @@ def convert(input_path, output_path=None, *,
             auto_scale=True,
             flag_review=True,
             deep_clean=True,
+            ai_read=True,
+            ai_key=None,
             review_conf=70,
             min_line_px=6.0,
             speck_px=8,
@@ -753,7 +755,8 @@ def convert(input_path, output_path=None, *,
             do_page_crop=do_page_crop, do_deskew=do_deskew, do_ocr=do_ocr,
             do_curves=do_curves, ortho_snap=ortho_snap,
             auto_scale=auto_scale, flag_review=flag_review,
-            deep_clean=deep_clean, review_conf=review_conf,
+            deep_clean=deep_clean, ai_read=ai_read, ai_key=ai_key,
+            review_conf=review_conf,
             min_line_px=min_line_px, speck_px=speck_px,
             ocr_min_conf=ocr_min_conf)
     if output_path is None:
@@ -811,6 +814,21 @@ def convert(input_path, output_path=None, *,
         else:
             log("WARNING: Tesseract not found - skipping OCR. "
                 "Install it or set TESSERACT_CMD.")
+        if words and ai_read:
+            try:
+                import ai_ocr
+                if ai_ocr.available(ai_key):
+                    log("AI text reading (Claude) - re-reading every "
+                        "label ...")
+                    n = ai_ocr.refine_words(gray_ocr, words, api_key=ai_key,
+                                            log=log)
+                    log(f"AI corrected or verified {n} labels.")
+                else:
+                    log("AI text reading skipped - no Anthropic API key "
+                        "(set ANTHROPIC_API_KEY or enter one in the GUI).")
+            except Exception as exc:
+                log(f"AI text reading failed ({exc}) - "
+                    f"keeping Tesseract text.")
 
     line_img = mask_words(ink, words) if words else ink
 
@@ -927,6 +945,10 @@ def main():
                     help="don't flag uncertain text on the TEXT_REVIEW layer")
     ap.add_argument("--no-clean", action="store_true",
                     help="don't auto deep-clean dirty scans")
+    ap.add_argument("--no-ai", action="store_true",
+                    help="don't re-read text with the Claude API")
+    ap.add_argument("--ai-key", help="Anthropic API key for AI text reading "
+                    "(default: ANTHROPIC_API_KEY env or saved key)")
     ap.add_argument("--review-conf", type=float, default=70,
                     help="OCR confidence below this is flagged (default 70)")
     ap.add_argument("--min-line", type=float, default=6.0,
@@ -947,6 +969,8 @@ def main():
             auto_scale=not args.no_autoscale,
             flag_review=not args.no_review,
             deep_clean=not args.no_clean,
+            ai_read=not args.no_ai,
+            ai_key=args.ai_key,
             review_conf=args.review_conf,
             min_line_px=args.min_line,
             speck_px=args.speck)
