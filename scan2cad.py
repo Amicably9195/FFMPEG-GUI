@@ -406,6 +406,7 @@ def estimate_scale(words, segs, tolerance=0.06, extra_segs=None,
                                  meas[:, 2] - meas[:, 0])) % 180.0
 
     cands = []  # (word index, implied ft/px, distance to line)
+    per_label = []
     for wi, w in enumerate(dims):
         cx, cy = w["x"] + w["w"] / 2.0, w["y"] + w["h"] / 2.0
         c = np.array([cx, cy])
@@ -435,7 +436,22 @@ def estimate_scale(words, segs, tolerance=0.06, extra_segs=None,
             perp = abs(float((c - a) @ n))
             if perp > max(8.0 * w["cap"], 150.0):
                 continue
-            cands.append((wi, w["dim"] / mlen[i], perp))
+            per_label.append((wi, w["dim"] / mlen[i], perp,
+                              float(mlen[i]), float(mang[i])))
+    # fragments of one broken line must not vote alongside the full line:
+    # per label, keep only the longest candidate among collinear ones
+    # (same orientation, same offset from the label)
+    per_label.sort(key=lambda t: -t[3])
+    kept = []
+    for cand in per_label:
+        dup = any(k[0] == cand[0]
+                  and abs(k[2] - cand[2]) <= 10.0
+                  and min(abs(k[4] - cand[4]),
+                          180.0 - abs(k[4] - cand[4])) < 3.0
+                  for k in kept)
+        if not dup:
+            kept.append(cand)
+    cands = [(wi, s, perp) for wi, s, perp, _, _ in kept]
     if not cands:
         return None
 
