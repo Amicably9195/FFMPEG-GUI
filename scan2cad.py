@@ -340,6 +340,11 @@ def parse_dimension(text):
             # with two decimals on a drawing
             return inches
         return inches / 12.0 if inches > 0 else None
+    # 26-2" is a feet-inches label whose foot mark the OCR dropped -
+    # on a drawing it can only mean 26'-2"
+    m = re.fullmatch(r"[±+\-]?(\d{1,3})-(\d{1,2}(?:\.\d+)?)\"", t)
+    if m:
+        return float(m.group(1)) + float(m.group(2)) / 12.0
     return None
 
 
@@ -373,7 +378,7 @@ def estimate_scale(words, segs, tolerance=0.06, extra_segs=None,
       dim_ok = False  dimension contradicts it -> needs human review
     """
     dims = [w for w in words if _verifiable(w)]
-    if len(dims) < 3 or len(segs) < 1:
+    if len(dims) < 2 or len(segs) < 1:
         return None
     # measurement geometry: the merged display lines plus edge-detected
     # segments (which see bold property lines as single pieces). The pool
@@ -922,7 +927,7 @@ def convert(input_path, output_path=None, *,
     log(f"Wrote {output_path}  ({n_lines} lines, {len(curves)} polylines, "
         f"{len(words)} text entities)")
     return dict(output=output_path, lines=n_lines, curves=len(curves),
-                words=len(words), review=n_review,
+                words=len(words), review=n_review, scale=scale,
                 units="feet" if units_feet else "pixels", size=gray.shape)
 
 
