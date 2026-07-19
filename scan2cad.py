@@ -492,6 +492,50 @@ def estimate_scale(words, segs, tolerance=0.06, extra_segs=None,
     return scale
 
 
+def pair_dimensions(words, segs, scale=None, tol=0.10):
+    """Recognize real dimension strings: a parsed dimension label sitting ON
+    the line it annotates (centered, within a couple of text-heights).
+    When a scale is known the pairing must also agree with it. Returns
+    [(word, seg_index)] - anything not confidently paired stays as plain
+    line + text (faithful: no guessing)."""
+    if len(segs) == 0:
+        return []
+    length = np.hypot(segs[:, 2] - segs[:, 0], segs[:, 3] - segs[:, 1])
+    angle = np.degrees(np.arctan2(segs[:, 3] - segs[:, 1],
+                                  segs[:, 2] - segs[:, 0])) % 180.0
+    pairs = []
+    used = set()
+    for w in words:
+        if not _verifiable(w):
+            continue
+        c = np.array([w["x"] + w["w"] / 2.0, w["y"] + w["h"] / 2.0])
+        vertical = w["rotation"] in (90, 270)
+        reading_len = w["h"] if vertical else w["w"]
+        best = None
+        for i in range(len(segs)):
+            if i in used or length[i] < max(30.0, 1.05 * reading_len):
+                continue
+            ang_ok = (70 < angle[i] < 110) if vertical else \
+                     (angle[i] < 20 or angle[i] > 160)
+            if not ang_ok:
+                continue
+            a = segs[i, :2]
+            d = (segs[i, 2:] - a) / length[i]
+            n = np.array([-d[1], d[0]])
+            frac = float((c - a) @ d) / length[i]
+            perp = abs(float((c - a) @ n))
+            if not 0.12 <= frac <= 0.88 or perp > max(2.5 * w["cap"], 18.0):
+                continue
+            if scale and abs((w["dim"] / length[i]) / scale - 1.0) > tol:
+                continue
+            if best is None or perp < best[0]:
+                best = (perp, i)
+        if best is not None:
+            pairs.append((w, best[1]))
+            used.add(best[1])
+    return pairs
+
+
 def mask_words(ink, words, pad=2):
     """Blank OCRed word boxes out of the ink mask so text isn't vectorized."""
     out = ink.copy()
@@ -1003,7 +1047,8 @@ def residual_curves(ink, segs, width, min_area=40, epsilon=1.8):
 # ── DXF output ─────────────────────────────────────────────────────────────────
 
 def write_dxf(path, img_h, segments, curves, words, scale=1.0,
-              min_len_px=6.0, units_feet=False, rounds=(), dashed=()):
+              min_len_px=6.0, units_feet=False, rounds=(), dashed=(),
+              dims=()):
     doc = ezdxf.new("R2010", setup=True)
     doc.layers.add("LINES", color=7)
     doc.layers.add("CURVES", color=4)
@@ -1011,6 +1056,8 @@ def write_dxf(path, img_h, segments, curves, words, scale=1.0,
     # uncertain text lives on a hidden layer: the drawing opens clean, and
     # turning TEXT_REVIEW on shows the red marks for proofreading
     doc.layers.add("TEXT_REVIEW", color=1).off()
+    if dims:
+        doc.layers.add("DIMENSIONS", color=2)
     if units_feet:
         doc.header["$INSUNITS"] = 2  # feet
     # a real font instead of the default stick font
@@ -1054,6 +1101,16 @@ def write_dxf(path, img_h, segments, curves, words, scale=1.0,
                 a1, a2 = a2, a1
             msp.add_arc(center, radius, a1, a2,
                         dxfattribs={"layer": "CURVES"})
+
+    for wd, seg in dims:
+        h = max(0.5 * scale, 0.72 * wd["cap"] * scale)
+        dim = msp.add_aligned_dim(
+            p1=pt(seg[0], seg[1]), p2=pt(seg[2], seg[3]), distance=0.0,
+            text=wd["text"],
+            override={"dimtxt": h, "dimasz": 0.6 * h, "dimgap": 0.25 * h,
+                      "dimexo": 0.3 * h, "dimexe": 0.3 * h},
+            dxfattribs={"layer": "DIMENSIONS"})
+        dim.render()
 
     for wd in words:
         height = max(0.5 * scale, 0.72 * wd["cap"] * scale)
@@ -1254,6 +1311,21 @@ def convert(input_path, output_path=None, *,
         else:
             log("Dimensions found but no consistent scale - "
                 "output stays in pixel units.")
+    # dimensions remain dimensions: label-on-line pairs become true
+    # DIMENSION entities; everything else stays line + text
+    dim_pairs = []
+    if words and len(segs):
+        pairs = pair_dimensions(words, segs,
+                                scale=scale if units_feet else None)
+        if pairs:
+            drop = sorted({i for _, i in pairs}, reverse=True)
+            dim_pairs = [(w, segs[i].copy()) for w, i in pairs]
+            segs = np.delete(segs, drop, axis=0)
+            for w, _ in dim_pairs:
+                w["as_dim"] = True
+            log(f"{len(dim_pairs)} dimension entities recognized.")
+        words = [w for w in words if not w.get("as_dim")]
+
     n_review = sum(1 for w in words if w.get("review"))
     if n_review:
         log(f"{n_review} uncertain text items moved to red TEXT_REVIEW layer "
@@ -1261,10 +1333,11 @@ def convert(input_path, output_path=None, *,
 
     n_lines = write_dxf(output_path, gray.shape[0], segs, curves, words,
                         scale=scale, min_len_px=min_line_px,
-                        units_feet=units_feet, rounds=rounds, dashed=dashed)
+                        units_feet=units_feet, rounds=rounds, dashed=dashed,
+                        dims=dim_pairs)
     log(f"Wrote {output_path}  ({n_lines} lines, {len(dashed)} dashed, "
         f"{len(curves)} polylines, {len(rounds)} circles/arcs, "
-        f"{len(words)} text entities)")
+        f"{len(dim_pairs)} dimensions, {len(words)} text entities)")
     return dict(output=output_path, lines=n_lines, curves=len(curves),
                 words=len(words), review=n_review, scale=scale,
                 units="feet" if units_feet else "pixels", size=gray.shape)

@@ -145,7 +145,7 @@ def render(segs, labels, rng, dirty=False, circles=(), dashes=()):
 
 
 def score(dxf_path, truth_px, labels, img_h, true_scale, used_scale=1.0,
-          truth_circ=(), truth_dash=()):
+          truth_circ=(), truth_dash=(), truth_dims=()):
     doc = ezdxf.readfile(dxf_path)
     msp = doc.modelspace()
     units_feet = doc.header.get("$INSUNITS", 0) == 2
@@ -187,6 +187,11 @@ def score(dxf_path, truth_px, labels, img_h, true_scale, used_scale=1.0,
             for k in range(len(xs) - 1):
                 cv2.line(got, (int(xs[k]), int(ys[k])),
                          (int(xs[k + 1]), int(ys[k + 1])), 255, 1)
+        elif e.dxftype() == "DIMENSION":
+            p2 = unpt(e.dxf.defpoint2.x, e.dxf.defpoint2.y)
+            p3 = unpt(e.dxf.defpoint3.x, e.dxf.defpoint3.y)
+            cv2.line(got, (int(p2[0]), int(p2[1])),
+                     (int(p3[0]), int(p3[1])), 255, 1)
     for p1, p2 in truth_px:
         cv2.line(want, p1, p2, 255, 1)
     for c, r in truth_circ:
@@ -224,8 +229,25 @@ def score(dxf_path, truth_px, labels, img_h, true_scale, used_scale=1.0,
     coverage = (want & got_fat).sum() / max(1, want.sum())
     precision = (got & want_fat).sum() / max(1, got.sum())
 
+    # DIMENSION entities: text must parse to the truth value, geometry must
+    # span the truth dimension line. Their text also counts for text score.
+    dim_ents = [e for e in msp if e.dxftype() == "DIMENSION"]
+    dims_ok = 0
+    for value, seg in truth_dims:
+        for e in dim_ents:
+            got_v = scan2cad.parse_dimension(e.dxf.text or "")
+            if got_v is None or abs(got_v - value) > 1.0 / 24:
+                continue
+            p2 = unpt(e.dxf.defpoint2.x, e.dxf.defpoint2.y)
+            p3 = unpt(e.dxf.defpoint3.x, e.dxf.defpoint3.y)
+            length = np.hypot(p3[0] - p2[0], p3[1] - p2[1])
+            want_len = np.hypot(seg[2] - seg[0], seg[3] - seg[1]) * PX_PER_FT
+            if abs(length - want_len) < 12:
+                dims_ok += 1
+                break
     texts = {e.dxf.text.strip().upper()
              for e in msp if e.dxftype() == "TEXT"}
+    texts |= {(e.dxf.text or "").strip().upper() for e in dim_ents}
     joined = " ".join(texts)
     hits = sum(1 for t, *_ in labels
                if t.upper() in texts or t.upper() in joined)
@@ -263,7 +285,7 @@ def score(dxf_path, truth_px, labels, img_h, true_scale, used_scale=1.0,
                 joints_ok += 1
     return (coverage, precision, hits, len(labels), units_feet, scale_err,
             circ_ok, len(truth_circ), dash_ok, len(truth_dash),
-            joints_ok, joints_tot)
+            joints_ok, joints_tot, dims_ok, len(truth_dims))
 
 
 def main():
@@ -290,18 +312,18 @@ def main():
         stats = scan2cad.convert(img_path, dxf_path, do_page_crop=False,
                                  do_deskew=False, log=lambda m: None)
         (cov, prec, hits, total, feet, serr, cok, ctot, dok, dtot,
-         jok, jtot) = score(
+         jok, jtot, mok, mtot) = score(
             dxf_path, truth_px, labels, img.shape[0], 1.0 / PX_PER_FT,
             used_scale=stats.get("scale", 1.0), truth_circ=truth_circ,
-            truth_dash=truth_dash)
+            truth_dash=truth_dash, truth_dims=dims)
         rows.append((i, dirty, cov, prec, hits, total, feet, cok, ctot,
-                     dok, dtot, jok, jtot))
+                     dok, dtot, jok, jtot, mok, mtot))
         stag = (f"YES (err {serr * 100:.1f}%)" if feet else "no")
         print(f"plan {i} ({'dirty' if dirty else 'clean'}): "
               f"line coverage {cov * 100:5.1f}%  precision {prec * 100:5.1f}%  "
               f"text {hits}/{total}  circles {cok}/{ctot}  "
               f"dashed {dok}/{dtot}  joints {jok}/{jtot}  "
-              f"scale-to-feet {stag}")
+              f"dims {mok}/{mtot}  scale-to-feet {stag}")
 
     cov = np.mean([r[2] for r in rows])
     prec = np.mean([r[3] for r in rows])
@@ -310,10 +332,11 @@ def main():
     circ = (sum(r[7] for r in rows), sum(r[8] for r in rows))
     dsh = (sum(r[9] for r in rows), sum(r[10] for r in rows))
     jnt = (sum(r[11] for r in rows), sum(r[12] for r in rows))
+    dm = (sum(r[13] for r in rows), sum(r[14] for r in rows))
     print(f"\nOVERALL: coverage {cov * 100:.1f}%  precision {prec * 100:.1f}%  "
           f"text {txt * 100:.1f}%  circles {circ[0]}/{circ[1]}  "
           f"dashed {dsh[0]}/{dsh[1]}  joints {jnt[0]}/{jnt[1]}  "
-          f"scale locked {scl}/{len(rows)}")
+          f"dims {dm[0]}/{dm[1]}  scale locked {scl}/{len(rows)}")
 
 
 if __name__ == "__main__":
