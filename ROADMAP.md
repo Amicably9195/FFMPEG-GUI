@@ -3,6 +3,26 @@
 **Goal:** PDFs, scans, photos, and CAD project files go in; proper, accurate
 DWG-class files come out. Everything runs locally, no per-use costs.
 
+## Guiding principle (adopted)
+
+**Faithful reconstruction over intelligent reconstruction.
+Preserve what exists. Never hallucinate. When confidence is low,
+flag it rather than guess.**
+
+The goal is not to repair or reinterpret drawings — it is to convert what
+already exists into editable CAD while preserving every property that can
+reasonably be recovered: vertical text stays vertical, rotated text keeps
+its rotation, circles become circles, arcs become arcs, dashed lines stay
+dashed, dimensions remain dimensions, symbols stay where they belong.
+Better ten uncertain labels flagged for review than one confidently wrong
+label in a legal survey. No silent "improvements" of the source.
+
+## Development process (adopted)
+
+One feature at a time: implement → benchmark → verify no regression →
+commit → next. Measured speed targets sit alongside quality targets:
+vector PDF under 10 s, large scan under 30 s, phone photo under 60 s.
+
 This document is the honest engineering plan: what exists, what it takes to
 get to the goal, and where the hard limits are. Written to be discussed —
 with the owner, with other AI assistants, with anyone.
@@ -65,6 +85,8 @@ is for, and it must stay.
   honest free library writes it perfectly from scratch; the ODA converter
   is the industry's standard answer, and it cannot legally be bundled
   inside our exe — the user installs it once, free.
+- The converter backend stays **modular**: ODA today, LibreDWG or a
+  commercial SDK swappable later without touching the rest of the app.
 
 ### Phase B — CAD-entity intelligence (raster tier grows up)
 *Closes: arcs, linetypes, hatches, dimension entities. Effort: weeks.*
@@ -81,6 +103,11 @@ is for, and it must stay.
   a drafter can grab and edit — not loose lines plus text.
 - **Topology cleanup:** endpoint snapping, corner closure, T-junction
   healing, so walls meet exactly and rooms close.
+- **Expanded scope (this phase gets priority over the AI tiers):** spline
+  detection, repeated-block recognition, title-block extraction, room
+  boundary detection, line-weight estimation, rotated-text preservation,
+  automatic layer inference. A surprising amount of "intelligence" is
+  deterministic geometry — faster, debuggable, predictable.
 
 ### Phase C — Better text, locally (the ML tier — this is where
 "feeding it drawings" becomes real)
@@ -89,7 +116,12 @@ is for, and it must stay.
 - **Swap-in stronger local models:** TrOCR-handwritten and PaddleOCR server
   models are free, open, and stronger than the current readers on hard
   text. Cost: bigger download, slower on CPU.
-- **Fine-tuning on drafting lettering — the real "learn from drawings":**
+- **Stage 1 — synthetic pre-training:** generate large datasets from CAD
+  renders (varied fonts, dimension styles, rotation, skew, blur, JPEG
+  artifacts, photocopy degradation, stains, faded ink). The benchmark
+  generator already produces exactly this kind of data; scaled up, it
+  gives the recognizer a strong start before any human labels a thing.
+- **Stage 2 — fine-tuning on drafting lettering, from user corrections:**
   1. A correction screen in the app: it shows each uncertain label next to
      the image crop; the user fixes the text with a keystroke.
   2. Every correction is saved as a training pair (image → truth).
@@ -115,6 +147,11 @@ weeks; **hardware required**.*
   machine, this tier is minutes-per-drawing slow or unavailable.
 - The program should treat this tier like Tesseract: optional, detected,
   gracefully absent.
+- **Deterministic-first hierarchy:** before asking any AI model whether
+  something is a wall, exhaust graph connectivity, geometric constraints,
+  symbol libraries, topology analysis, and CAD heuristics. AI is the
+  last resort for what deterministic methods cannot confidently classify,
+  never the first tool reached for.
 
 ### Phase E — Verification as a first-class feature
 *Closes: "perfect" where it can't be automatic — by making human checking fast.*
@@ -125,6 +162,11 @@ weeks; **hardware required**.*
   verified against its measured geometry; disagreements flagged with both
   numbers shown.
 - One-key review flow for flagged text (feeds Phase C's data loop).
+- **Drawing lint:** flag disconnected walls, duplicate geometry,
+  impossible intersections, missing extension lines, open polygons,
+  inconsistent scales, impossible room boundaries, and geometry that
+  disagrees with its annotation. Professionals trust software that
+  points out problems instead of hiding them.
 - Expanded benchmark: more plan styles, curved geometry, real annotated
   scans as they accumulate.
 

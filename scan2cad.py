@@ -553,12 +553,135 @@ def _trace_skeleton(skel):
     return paths
 
 
+def _fit_circle(pts):
+    """Least-squares circle fit (Kasa). Returns (cx, cy, r, max_residual)."""
+    a = np.c_[2.0 * pts[:, 0], 2.0 * pts[:, 1], np.ones(len(pts))]
+    b = (pts ** 2).sum(axis=1)
+    try:
+        sol, *_ = np.linalg.lstsq(a, b, rcond=None)
+    except np.linalg.LinAlgError:
+        return None
+    cx, cy = float(sol[0]), float(sol[1])
+    r2 = float(sol[2]) + cx * cx + cy * cy
+    if r2 <= 0:
+        return None
+    r = math.sqrt(r2)
+    resid = np.abs(np.hypot(pts[:, 0] - cx, pts[:, 1] - cy) - r)
+    return cx, cy, r, float(resid.max())
+
+
+def _try_arc(pts, closed):
+    """If the traced path is faithfully a circle or arc, return the entity:
+    ('circle', cx, cy, r) or ('arc', cx, cy, r, p_start, p_end, p_mid).
+    Faithful reconstruction only - a sloppy fit returns None."""
+    if len(pts) < 8:
+        return None
+    fit = _fit_circle(pts.astype(np.float64))
+    if fit is None:
+        return None
+    cx, cy, r, resid = fit
+    if not 6.0 <= r <= 3000.0 or resid > max(2.0, 0.035 * r):
+        return None
+    ang = np.unwrap(np.arctan2(pts[:, 1] - cy, pts[:, 0] - cx))
+    span = math.degrees(abs(float(ang[-1] - ang[0])))
+    if closed or span >= 355.0:
+        return ("circle", cx, cy, r)
+    if span < 40.0:
+        return None  # too shallow to assert an arc faithfully
+    return ("arc", cx, cy, r, tuple(pts[0]), tuple(pts[-1]),
+            tuple(pts[len(pts) // 2]))
+
+
+def detect_circles(ink, min_r=8, max_r=300):
+    """Find isolated drawn circles deterministically: a circle standing on
+    its own is a single connected ink component whose pixels all sit at one
+    radius from one center, covering (almost) the full turn. Every test is
+    against the actual pixels - no candidate voting, no guessing.
+    Returns (circle entities, ink with those components erased)."""
+    n, comp, stats, _ = cv2.connectedComponentsWithStats(ink, connectivity=8)
+    accepted = []
+    out = ink.copy()
+    for i in range(1, n):
+        x, y, w, h, area = stats[i]
+        if (w < 2 * min_r - 4 or h < 2 * min_r - 4
+                or w > 2 * max_r or h > 2 * max_r):
+            continue
+        if not 0.75 <= w / float(h) <= 1.33:
+            continue
+        ys, xs = np.nonzero(comp[y:y + h, x:x + w] == i)
+        pts = np.column_stack([xs, ys]).astype(np.float64)
+        fit = _fit_circle(pts)
+        if fit is None:
+            continue
+        cx, cy, r, _ = fit
+        if not min_r <= r <= max_r:
+            continue
+        dist = np.hypot(pts[:, 0] - cx, pts[:, 1] - cy)
+        # a ring, not a disk or a glyph: nearly all pixels at one radius
+        if np.percentile(np.abs(dist - r), 95) > max(3.5, 0.10 * r):
+            continue
+        # nearly the full turn present
+        ang = np.arctan2(pts[:, 1] - cy, pts[:, 0] - cx)
+        filled = len(np.unique((ang // (2 * np.pi / 36)).astype(int)))
+        if filled < 33:
+            continue
+        accepted.append(("circle", cx + x, cy + y, r))
+        out[comp == i] = 0
+    return accepted, out
+
+
+def _arc_span(arc):
+    """Angular coverage (deg) of an ('arc', cx, cy, r, p1, p2, pm) entity."""
+    _, cx, cy, _, p1, p2, pm = arc
+
+    def ang(p):
+        return math.degrees(math.atan2(p[1] - cy, p[0] - cx)) % 360.0
+    a1, a2, am = ang(p1), ang(p2), ang(pm)
+    sweep = (a2 - a1) % 360.0
+    if (am - a1) % 360.0 > sweep:
+        sweep = 360.0 - sweep
+    return sweep
+
+
+def _merge_rounds(rounds):
+    """A circle traced as two half-arcs must come back as ONE circle:
+    arcs sharing a center and radius whose spans cover most of the turn
+    merge into a circle entity. Tiny letter-scrap arcs are dropped."""
+    out = [r for r in rounds if r[0] == "circle" and r[3] >= 8.0]
+    arcs = [r for r in rounds if r[0] == "arc"]
+    used = [False] * len(arcs)
+    for i, a in enumerate(arcs):
+        if used[i]:
+            continue
+        group = [a]
+        used[i] = True
+        for j in range(i + 1, len(arcs)):
+            b = arcs[j]
+            if (not used[j] and abs(a[1] - b[1]) < 6 and abs(a[2] - b[2]) < 6
+                    and abs(a[3] - b[3]) < 4):
+                group.append(b)
+                used[j] = True
+        radius = float(np.mean([g[3] for g in group]))
+        if (len(group) > 1 and radius >= 8.0
+                and sum(_arc_span(g) for g in group) > 300.0):
+            out.append(("circle",
+                        float(np.mean([g[1] for g in group])),
+                        float(np.mean([g[2] for g in group])), radius))
+            continue
+        for g in group:
+            # a faithful arc entity must be big enough to not be a glyph
+            if g[3] >= 12.0 and g[3] * math.radians(_arc_span(g)) >= 45.0:
+                out.append(g)
+    return out
+
+
 def vectorize_centerlines(ink, min_len=6.0, epsilon=1.4):
     """Thin ink to 1-px skeletons and trace single centerlines: one stroke on
     paper -> one LINE / one polyline, no doubled edges, no outlines.
-    Returns (segments Nx4, list of (points Nx2, closed))."""
+    Circles and arcs are recognized and returned as true entities.
+    Returns (segments Nx4, polylines [(points Nx2, closed)], round_entities)."""
     skel = cv2.ximgproc.thinning(ink)
-    segments, polys = [], []
+    segments, polys, rounds = [], [], []
     for path in _trace_skeleton(skel):
         if len(path) < 2:
             continue
@@ -566,7 +689,11 @@ def vectorize_centerlines(ink, min_len=6.0, epsilon=1.4):
         closed = path[0] == path[-1] and len(path) > 3
         approx = cv2.approxPolyDP(arr, epsilon, closed).reshape(-1, 2)
         if closed and len(approx) >= 3:
-            polys.append((approx.astype(np.float64), True))
+            ent = _try_arc(arr.reshape(-1, 2), True)
+            if ent:
+                rounds.append(ent)
+            else:
+                polys.append((approx.astype(np.float64), True))
             continue
         if len(approx) == 2:
             (x1, y1), (x2, y2) = approx
@@ -585,8 +712,13 @@ def vectorize_centerlines(ink, min_len=6.0, epsilon=1.4):
             if chord >= min_len and dev <= max(2.5, 0.015 * chord):
                 segments.append((p1[0], p1[1], p2[0], p2[1]))
             else:
-                polys.append((approx.astype(np.float64), False))
-    return (np.array(segments) if segments else np.empty((0, 4))), polys
+                ent = _try_arc(arr.reshape(-1, 2), False)
+                if ent:
+                    rounds.append(ent)
+                else:
+                    polys.append((approx.astype(np.float64), False))
+    return ((np.array(segments) if segments else np.empty((0, 4))),
+            polys, _merge_rounds(rounds))
 
 
 def _feature_size(points):
@@ -718,7 +850,7 @@ def residual_curves(ink, segs, width, min_area=40, epsilon=1.8):
 # ── DXF output ─────────────────────────────────────────────────────────────────
 
 def write_dxf(path, img_h, segments, curves, words, scale=1.0,
-              min_len_px=6.0, units_feet=False):
+              min_len_px=6.0, units_feet=False, rounds=()):
     doc = ezdxf.new("R2010", setup=True)
     doc.layers.add("LINES", color=7)
     doc.layers.add("CURVES", color=4)
@@ -745,6 +877,22 @@ def write_dxf(path, img_h, segments, curves, words, scale=1.0,
     for points, closed in curves:
         msp.add_lwpolyline([pt(x, y) for x, y in points], close=closed,
                            dxfattribs={"layer": "CURVES"})
+
+    for ent in rounds:
+        center = pt(ent[1], ent[2])
+        radius = ent[3] * scale
+        if ent[0] == "circle":
+            msp.add_circle(center, radius, dxfattribs={"layer": "CURVES"})
+        else:  # arc: pick the sweep that passes through the traced midpoint
+            def angle(p):
+                x, y = pt(p[0], p[1])
+                return math.degrees(math.atan2(y - center[1],
+                                               x - center[0])) % 360.0
+            a1, a2, am = angle(ent[4]), angle(ent[5]), angle(ent[6])
+            if not ((a2 - a1) % 360.0) >= ((am - a1) % 360.0):
+                a1, a2 = a2, a1
+            msp.add_arc(center, radius, a1, a2,
+                        dxfattribs={"layer": "CURVES"})
 
     for wd in words:
         height = max(0.5 * scale, 0.72 * wd["cap"] * scale)
@@ -869,8 +1017,11 @@ def convert(input_path, output_path=None, *,
     line_img = mask_words(ink, words) if words else ink
 
     log("Tracing stroke centerlines ...")
+    rounds, line_img = detect_circles(line_img)
     try:
-        segs, curves = vectorize_centerlines(line_img, min_len=min_line_px)
+        segs, curves, arcs = vectorize_centerlines(line_img,
+                                                   min_len=min_line_px)
+        rounds = rounds + arcs
     except (AttributeError, cv2.error):
         # opencv build without ximgproc thinning: fall back to edge-based
         # detection (noticeably worse - doubled lines). The install must
@@ -880,7 +1031,8 @@ def convert(input_path, output_path=None, *,
         segs = detect_segments(line_img)
         width = stroke_width(line_img)
         curves = residual_curves(line_img, segs, width) if do_curves else []
-    log(f"  {len(segs)} strokes, {len(curves)} curved paths.")
+    log(f"  {len(segs)} strokes, {len(curves)} curved paths, "
+        f"{len(rounds)} circles/arcs.")
     if ortho_snap and len(segs):
         segs = snap_orthogonal(segs)
     if len(segs):
@@ -939,9 +1091,9 @@ def convert(input_path, output_path=None, *,
 
     n_lines = write_dxf(output_path, gray.shape[0], segs, curves, words,
                         scale=scale, min_len_px=min_line_px,
-                        units_feet=units_feet)
+                        units_feet=units_feet, rounds=rounds)
     log(f"Wrote {output_path}  ({n_lines} lines, {len(curves)} polylines, "
-        f"{len(words)} text entities)")
+        f"{len(rounds)} circles/arcs, {len(words)} text entities)")
     return dict(output=output_path, lines=n_lines, curves=len(curves),
                 words=len(words), review=n_review, scale=scale,
                 units="feet" if units_feet else "pixels", size=gray.shape)

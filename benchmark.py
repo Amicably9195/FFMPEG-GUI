@@ -76,10 +76,13 @@ def generate_plan(rng):
     for i in range(len(ys) - 1):
         cy = (ys[i] + ys[i + 1]) / 2
         labels.append((rng.choice(ROOM_NAMES), w * 0.55, cy, 0))
-    return segs, labels, dims
+    # a round column - circles must come back as circles
+    circles = [(w * rng.uniform(0.15, 0.3), h * rng.uniform(0.15, 0.3),
+                rng.uniform(0.9, 1.6))]
+    return segs, labels, dims, circles
 
 
-def render(segs, labels, rng, dirty=False):
+def render(segs, labels, rng, dirty=False, circles=()):
     """Rasterize the plan the way a scan of it would look."""
     xs = [s[i] for s in segs for i in (0, 2)]
     ys = [s[i] for s in segs for i in (1, 3)]
@@ -94,6 +97,10 @@ def render(segs, labels, rng, dirty=False):
 
     for x1, y1, x2, y2 in segs:
         cv2.line(img, pt(x1, y1), pt(x2, y2), 0, 3, cv2.LINE_AA)
+    truth_circ = []
+    for cx, cy, cr in circles:
+        cv2.circle(img, pt(cx, cy), int(cr * PX_PER_FT), 0, 3, cv2.LINE_AA)
+        truth_circ.append((pt(cx, cy), cr * PX_PER_FT))
     for text, lx, ly, rot in labels:
         px, py = pt(lx, ly)
         if rot == 0:
@@ -119,10 +126,11 @@ def render(segs, labels, rng, dirty=False):
         img = cv2.GaussianBlur(img, (3, 3), 0)
         grad = np.linspace(0.75, 1.0, img.shape[1])[None, :]
         img = np.clip(img * grad, 0, 255).astype(np.uint8)
-    return img, truth_px
+    return img, truth_px, truth_circ
 
 
-def score(dxf_path, truth_px, labels, img_h, true_scale, used_scale=1.0):
+def score(dxf_path, truth_px, labels, img_h, true_scale, used_scale=1.0,
+          truth_circ=()):
     doc = ezdxf.readfile(dxf_path)
     msp = doc.modelspace()
     units_feet = doc.header.get("$INSUNITS", 0) == 2
@@ -149,8 +157,35 @@ def score(dxf_path, truth_px, labels, img_h, true_scale, used_scale=1.0):
             for a, b in zip(pts, pts[1:]):
                 cv2.line(got, (int(a[0]), int(a[1])),
                          (int(b[0]), int(b[1])), 255, 1)
+        elif e.dxftype() in ("CIRCLE", "ARC"):
+            c = unpt(e.dxf.center.x, e.dxf.center.y)
+            r = e.dxf.radius / s
+            if e.dxftype() == "CIRCLE":
+                a0, a1 = 0.0, 360.0
+            else:
+                a0, a1 = e.dxf.start_angle, e.dxf.end_angle
+            sweep = (a1 - a0) % 360.0 or 360.0
+            angs = np.radians(a0 + np.linspace(0, sweep, 90))
+            # CAD y-up angles -> image y-down
+            xs = c[0] + r * np.cos(angs)
+            ys = c[1] - r * np.sin(angs)
+            for k in range(len(xs) - 1):
+                cv2.line(got, (int(xs[k]), int(ys[k])),
+                         (int(xs[k + 1]), int(ys[k + 1])), 255, 1)
     for p1, p2 in truth_px:
         cv2.line(want, p1, p2, 255, 1)
+    for c, r in truth_circ:
+        cv2.circle(want, c, int(r), 255, 1)
+    circ_ok = 0
+    if truth_circ:
+        circs = [e for e in msp if e.dxftype() == "CIRCLE"]
+        for (tcx, tcy), tr in truth_circ:
+            for e in circs:
+                cx, cy = unpt(e.dxf.center.x, e.dxf.center.y)
+                if (abs(cx - tcx) < 6 and abs(cy - tcy) < 6
+                        and abs(e.dxf.radius / s - tr) < 5):
+                    circ_ok += 1
+                    break
 
     k = np.ones((7, 7), np.uint8)
     want_fat = cv2.dilate(want, k)
@@ -164,7 +199,8 @@ def score(dxf_path, truth_px, labels, img_h, true_scale, used_scale=1.0):
     hits = sum(1 for t, *_ in labels
                if t.upper() in texts or t.upper() in joined)
 
-    return coverage, precision, hits, len(labels), units_feet, scale_err
+    return (coverage, precision, hits, len(labels), units_feet, scale_err,
+            circ_ok, len(truth_circ))
 
 
 def main():
@@ -182,28 +218,32 @@ def main():
               if args.keep else tempfile.mkdtemp())
     for i in range(args.n):
         dirty = i % 2 == 1
-        segs, labels, dims = generate_plan(pyrng)
-        img, truth_px = render(segs, labels, rng, dirty=dirty)
+        segs, labels, dims, circles = generate_plan(pyrng)
+        img, truth_px, truth_circ = render(segs, labels, rng, dirty=dirty,
+                                           circles=circles)
         img_path = os.path.join(outdir, f"bench_{i}.png")
         cv2.imwrite(img_path, img)
         dxf_path = os.path.join(outdir, f"bench_{i}.dxf")
         stats = scan2cad.convert(img_path, dxf_path, do_page_crop=False,
                                  do_deskew=False, log=lambda m: None)
-        cov, prec, hits, total, feet, serr = score(
+        cov, prec, hits, total, feet, serr, cok, ctot = score(
             dxf_path, truth_px, labels, img.shape[0], 1.0 / PX_PER_FT,
-            used_scale=stats.get("scale", 1.0))
-        rows.append((i, dirty, cov, prec, hits, total, feet))
+            used_scale=stats.get("scale", 1.0), truth_circ=truth_circ)
+        rows.append((i, dirty, cov, prec, hits, total, feet, cok, ctot))
         stag = (f"YES (err {serr * 100:.1f}%)" if feet else "no")
         print(f"plan {i} ({'dirty' if dirty else 'clean'}): "
               f"line coverage {cov * 100:5.1f}%  precision {prec * 100:5.1f}%  "
-              f"text {hits}/{total}  scale-to-feet {stag}")
+              f"text {hits}/{total}  circles {cok}/{ctot}  "
+              f"scale-to-feet {stag}")
 
     cov = np.mean([r[2] for r in rows])
     prec = np.mean([r[3] for r in rows])
     txt = sum(r[4] for r in rows) / max(1, sum(r[5] for r in rows))
     scl = sum(1 for r in rows if r[6])
+    circ = (sum(r[7] for r in rows), sum(r[8] for r in rows))
     print(f"\nOVERALL: coverage {cov * 100:.1f}%  precision {prec * 100:.1f}%  "
-          f"text {txt * 100:.1f}%  scale locked {scl}/{len(rows)}")
+          f"text {txt * 100:.1f}%  circles {circ[0]}/{circ[1]}  "
+          f"scale locked {scl}/{len(rows)}")
 
 
 if __name__ == "__main__":
