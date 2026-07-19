@@ -230,8 +230,40 @@ def score(dxf_path, truth_px, labels, img_h, true_scale, used_scale=1.0,
     hits = sum(1 for t, *_ in labels
                if t.upper() in texts or t.upper() in joined)
 
+    # joint closure: at each truth corner (shared truth endpoints), the
+    # recovered endpoints there must coincide EXACTLY, not approximately
+    corners = {}
+    for p1, p2 in truth_px:
+        for p in (p1, p2):
+            corners[p] = corners.get(p, 0) + 1
+    corners = [np.array(p, float) for p, k in corners.items() if k >= 2]
+    ends, verts = [], []
+    for e in msp:
+        if e.dxftype() == "LINE":
+            ends.append(unpt(e.dxf.start.x, e.dxf.start.y))
+            ends.append(unpt(e.dxf.end.x, e.dxf.end.y))
+        elif e.dxftype() == "LWPOLYLINE":
+            verts += [unpt(p[0], p[1]) for p in e.get_points()]
+    ends = np.array(ends) if ends else np.zeros((0, 2))
+    verts = np.array(verts) if verts else np.zeros((0, 2))
+    joints_ok, joints_tot = 0, 0
+    for c in corners:
+        near = ends[np.abs(ends - c).max(axis=1) <= 8] if len(ends) else []
+        nearv = (verts[np.abs(verts - c).max(axis=1) <= 8]
+                 if len(verts) else [])
+        if len(near) + len(nearv) == 0:
+            continue
+        joints_tot += 1
+        if len(nearv) and len(near) == 0:
+            joints_ok += 1  # a polyline runs through - inherently joined
+            continue
+        if len(near) >= 2:
+            spread = np.linalg.norm(near - near.mean(axis=0), axis=1).max()
+            if spread <= 0.75:
+                joints_ok += 1
     return (coverage, precision, hits, len(labels), units_feet, scale_err,
-            circ_ok, len(truth_circ), dash_ok, len(truth_dash))
+            circ_ok, len(truth_circ), dash_ok, len(truth_dash),
+            joints_ok, joints_tot)
 
 
 def main():
@@ -257,17 +289,19 @@ def main():
         dxf_path = os.path.join(outdir, f"bench_{i}.dxf")
         stats = scan2cad.convert(img_path, dxf_path, do_page_crop=False,
                                  do_deskew=False, log=lambda m: None)
-        cov, prec, hits, total, feet, serr, cok, ctot, dok, dtot = score(
+        (cov, prec, hits, total, feet, serr, cok, ctot, dok, dtot,
+         jok, jtot) = score(
             dxf_path, truth_px, labels, img.shape[0], 1.0 / PX_PER_FT,
             used_scale=stats.get("scale", 1.0), truth_circ=truth_circ,
             truth_dash=truth_dash)
         rows.append((i, dirty, cov, prec, hits, total, feet, cok, ctot,
-                     dok, dtot))
+                     dok, dtot, jok, jtot))
         stag = (f"YES (err {serr * 100:.1f}%)" if feet else "no")
         print(f"plan {i} ({'dirty' if dirty else 'clean'}): "
               f"line coverage {cov * 100:5.1f}%  precision {prec * 100:5.1f}%  "
               f"text {hits}/{total}  circles {cok}/{ctot}  "
-              f"dashed {dok}/{dtot}  scale-to-feet {stag}")
+              f"dashed {dok}/{dtot}  joints {jok}/{jtot}  "
+              f"scale-to-feet {stag}")
 
     cov = np.mean([r[2] for r in rows])
     prec = np.mean([r[3] for r in rows])
@@ -275,9 +309,11 @@ def main():
     scl = sum(1 for r in rows if r[6])
     circ = (sum(r[7] for r in rows), sum(r[8] for r in rows))
     dsh = (sum(r[9] for r in rows), sum(r[10] for r in rows))
+    jnt = (sum(r[11] for r in rows), sum(r[12] for r in rows))
     print(f"\nOVERALL: coverage {cov * 100:.1f}%  precision {prec * 100:.1f}%  "
           f"text {txt * 100:.1f}%  circles {circ[0]}/{circ[1]}  "
-          f"dashed {dsh[0]}/{dsh[1]}  scale locked {scl}/{len(rows)}")
+          f"dashed {dsh[0]}/{dsh[1]}  joints {jnt[0]}/{jnt[1]}  "
+          f"scale locked {scl}/{len(rows)}")
 
 
 if __name__ == "__main__":

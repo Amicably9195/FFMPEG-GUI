@@ -914,6 +914,71 @@ def detect_dashed(segs, min_run=4, max_dash=45.0, max_gap=35.0):
     return (np.array(dashed) if dashed else np.empty((0, 4))), solid
 
 
+def snap_topology(segs, tol=4.0):
+    """Heal junction gaps left by skeleton thinning: endpoints that belong
+    together meet exactly. Two passes - (1) endpoint clusters within tol
+    merge to their centroid (L-corners), (2) remaining endpoints within tol
+    of another line's interior are projected onto it (T-joints). Endpoints
+    only ever move by <= tol, and never more than a third of their own
+    segment's length, so geometry is corrected, not redrawn."""
+    n = len(segs)
+    if n == 0:
+        return segs
+    pts = np.vstack([segs[:, :2], segs[:, 2:]]).astype(np.float64)
+    seg_of = np.concatenate([np.arange(n), np.arange(n)])
+    seg_len = np.hypot(segs[:, 2] - segs[:, 0], segs[:, 3] - segs[:, 1])
+    max_move = np.minimum(tol, seg_len[seg_of] / 3.0)
+
+    # pass 1: corner clustering via grid hash
+    cell = {}
+    for i, (x, y) in enumerate(pts):
+        cell.setdefault((int(x // tol), int(y // tol)), []).append(i)
+    snapped = pts.copy()
+    clustered = np.zeros(len(pts), dtype=bool)
+    done = np.zeros(len(pts), dtype=bool)
+    for i in range(len(pts)):
+        if done[i]:
+            continue
+        x, y = pts[i]
+        kx, ky = int(x // tol), int(y // tol)
+        group = [j for dx in (-1, 0, 1) for dy in (-1, 0, 1)
+                 for j in cell.get((kx + dx, ky + dy), [])
+                 if not done[j]
+                 and abs(pts[j, 0] - x) <= tol and abs(pts[j, 1] - y) <= tol]
+        if len(group) > 1:
+            c = pts[group].mean(axis=0)
+            for j in group:
+                if np.hypot(*(pts[j] - c)) <= max_move[j]:
+                    snapped[j] = c
+                    clustered[j] = True
+                done[j] = True
+        else:
+            done[i] = True
+
+    # pass 2: T-joints - project leftover endpoints onto nearby interiors
+    a = snapped[:n]
+    b = snapped[n:]
+    ab = np.hstack([b - a])
+    l2 = np.maximum((ab ** 2).sum(axis=1), 1e-9)
+    todo = np.where(~clustered)[0]
+    for start in range(0, len(todo), 512):
+        idx = todo[start:start + 512]
+        p = snapped[idx]
+        diff = p[:, None, :] - a[None, :, :]
+        t = (diff * ab[None, :, :]).sum(-1) / l2[None, :]
+        q = a[None, :, :] + t[..., None] * ab[None, :, :]
+        d = np.linalg.norm(p[:, None, :] - q, axis=-1)
+        bad = (t < 0.08) | (t > 0.92)
+        d[bad] = 1e9
+        d[np.arange(len(idx)), seg_of[idx]] = 1e9
+        j = d.argmin(axis=1)
+        dm = d[np.arange(len(idx)), j]
+        ok = dm <= np.minimum(tol, max_move[idx])
+        snapped[idx[ok]] = q[np.arange(len(idx))[ok], j[ok]]
+
+    return np.hstack([snapped[:n], snapped[n:]])
+
+
 def residual_curves(ink, segs, width, min_area=40, epsilon=1.8):
     """Trace whatever ink the straight segments didn't explain (curves, circles,
     symbols) as polylines. Returns list of (points Nx2, closed)."""
@@ -1135,6 +1200,10 @@ def convert(input_path, output_path=None, *,
     if len(segs):
         segs = merge_segments(segs, gap_tol=6.0)
         dashed, segs = detect_dashed(segs)
+        # heal junctions so corners and T-joints meet exactly
+        both = np.vstack([segs, dashed]) if len(dashed) else segs
+        both = snap_topology(both)
+        segs, dashed = both[:len(segs)], both[len(segs):]
         log(f"  {len(segs)} lines after merging"
             + (f", {len(dashed)} dashed lines recognized." if len(dashed)
                else "."))
