@@ -826,6 +826,94 @@ def _merge_band(segs, band, ang, offset_tol, gap_tol, merged, used):
         merged.append(np.concatenate([r * n + cs * d, r * n + ce * d]))
 
 
+def detect_dashed(segs, min_run=4, max_dash=45.0, max_gap=35.0):
+    """Recognize dashed lines: a run of short collinear segments with a
+    regular dash/gap rhythm becomes ONE line carrying the DASHED linetype.
+    Irregular clusters are left untouched - no rhythm, no claim.
+    Returns (dashed Nx4, remaining solid segs)."""
+    if len(segs) == 0:
+        return np.empty((0, 4)), segs
+    dx = segs[:, 2] - segs[:, 0]
+    dy = segs[:, 3] - segs[:, 1]
+    ang = np.degrees(np.arctan2(dy, dx)) % 180.0
+    used = np.zeros(len(segs), dtype=bool)
+    dashed = []
+
+    def scan_band(band):
+        band = band[~used[band]]
+        if len(band) < min_run:
+            return
+        a = math.radians(np.median(np.where(ang[band] > 170,
+                                            ang[band] - 180, ang[band])))
+        d = np.array([math.cos(a), math.sin(a)])
+        nvec = np.array([-d[1], d[0]])
+        p1 = segs[band][:, :2]
+        p2 = segs[band][:, 2:]
+        rho = ((p1 + p2) / 2) @ nvec
+        t1, t2 = p1 @ d, p2 @ d
+        tmin, tmax = np.minimum(t1, t2), np.maximum(t1, t2)
+        order = np.argsort(rho)
+        k = 0
+        while k < len(order):
+            m = k
+            while m + 1 < len(order) and rho[order[m + 1]] - rho[order[m]] < 3.0:
+                m += 1
+            grp = band[order[k:m + 1]]
+            gt = np.argsort(tmin[order[k:m + 1]])
+            idx = grp[gt]
+            k = m + 1
+            # walk runs of dash-like members
+            run = []
+            def flush():
+                if len(run) >= min_run:
+                    lens = [tmax_of[j] - tmin_of[j] for j in run]
+                    gaps = [tmin_of[run[j + 1]] - tmax_of[run[j]]
+                            for j in range(len(run) - 1)]
+                    if (np.std(lens) <= 0.7 * max(1.0, np.mean(lens))
+                            and np.std(gaps) <= 0.7 * max(1.0, np.mean(gaps))):
+                        r = float(np.mean([rho_of[j] for j in run]))
+                        s0, s1 = tmin_of[run[0]], tmax_of[run[-1]]
+                        dashed.append(np.concatenate([r * nvec + s0 * d,
+                                                      r * nvec + s1 * d]))
+                        for j in run:
+                            used[j] = True
+                run.clear()
+            tmin_of = {j: float(min(segs[j][0] * d[0] + segs[j][1] * d[1],
+                                    segs[j][2] * d[0] + segs[j][3] * d[1]))
+                       for j in idx}
+            tmax_of = {j: float(max(segs[j][0] * d[0] + segs[j][1] * d[1],
+                                    segs[j][2] * d[0] + segs[j][3] * d[1]))
+                       for j in idx}
+            rho_of = {j: float(((segs[j][:2] + segs[j][2:]) / 2) @ nvec)
+                      for j in idx}
+            for j in idx:
+                seg_len = tmax_of[j] - tmin_of[j]
+                if seg_len > max_dash:
+                    flush()
+                    continue
+                if run:
+                    gap = tmin_of[j] - tmax_of[run[-1]]
+                    if not 2.0 <= gap <= max_gap:
+                        flush()
+                run.append(j)
+            flush()
+
+    order = np.argsort(ang)
+    i = 0
+    while i < len(order):
+        a0 = ang[order[i]]
+        j = i
+        while j < len(order) and ang[order[j]] - a0 <= 2.0:
+            j += 1
+        scan_band(order[i:j])
+        i = j
+    wrap = np.where((ang < 2.0) | (ang > 178.0))[0]
+    if len(wrap):
+        scan_band(wrap)
+    solid = segs[~used]
+    return (np.array(dashed) if dashed else np.empty((0, 4))), solid
+
+
 def residual_curves(ink, segs, width, min_area=40, epsilon=1.8):
     """Trace whatever ink the straight segments didn't explain (curves, circles,
     symbols) as polylines. Returns list of (points Nx2, closed)."""
@@ -850,7 +938,7 @@ def residual_curves(ink, segs, width, min_area=40, epsilon=1.8):
 # ── DXF output ─────────────────────────────────────────────────────────────────
 
 def write_dxf(path, img_h, segments, curves, words, scale=1.0,
-              min_len_px=6.0, units_feet=False, rounds=()):
+              min_len_px=6.0, units_feet=False, rounds=(), dashed=()):
     doc = ezdxf.new("R2010", setup=True)
     doc.layers.add("LINES", color=7)
     doc.layers.add("CURVES", color=4)
@@ -873,6 +961,14 @@ def write_dxf(path, img_h, segments, curves, words, scale=1.0,
             continue
         msp.add_line(pt(x1, y1), pt(x2, y2), dxfattribs={"layer": "LINES"})
         n_lines += 1
+
+    if len(dashed):
+        # make the dash pattern visible at this drawing's size
+        doc.header["$LTSCALE"] = max(0.5, 20.0 * scale)
+        for x1, y1, x2, y2 in dashed:
+            msp.add_line(pt(x1, y1), pt(x2, y2),
+                         dxfattribs={"layer": "LINES",
+                                     "linetype": "DASHED"})
 
     for points, closed in curves:
         msp.add_lwpolyline([pt(x, y) for x, y in points], close=closed,
@@ -1035,9 +1131,13 @@ def convert(input_path, output_path=None, *,
         f"{len(rounds)} circles/arcs.")
     if ortho_snap and len(segs):
         segs = snap_orthogonal(segs)
+    dashed = np.empty((0, 4))
     if len(segs):
         segs = merge_segments(segs, gap_tol=6.0)
-        log(f"  {len(segs)} lines after merging.")
+        dashed, segs = detect_dashed(segs)
+        log(f"  {len(segs)} lines after merging"
+            + (f", {len(dashed)} dashed lines recognized." if len(dashed)
+               else "."))
     if not do_curves:
         curves = []
     # unreadable letter-sized squiggles render as confetti in CAD - drop them
@@ -1066,7 +1166,8 @@ def convert(input_path, output_path=None, *,
             lsd_segs = detect_segments(line_img)
         except cv2.error:
             lsd_segs = None
-        ftpx = estimate_scale(words, segs, extra_segs=lsd_segs,
+        meas_segs = np.vstack([segs, dashed]) if len(dashed) else segs
+        ftpx = estimate_scale(words, meas_segs, extra_segs=lsd_segs,
                               img_shape=gray.shape)
         checked = [w for w in words if "dim_ok" in w]
         bad = [w for w in checked if not w["dim_ok"]]
@@ -1091,9 +1192,10 @@ def convert(input_path, output_path=None, *,
 
     n_lines = write_dxf(output_path, gray.shape[0], segs, curves, words,
                         scale=scale, min_len_px=min_line_px,
-                        units_feet=units_feet, rounds=rounds)
-    log(f"Wrote {output_path}  ({n_lines} lines, {len(curves)} polylines, "
-        f"{len(rounds)} circles/arcs, {len(words)} text entities)")
+                        units_feet=units_feet, rounds=rounds, dashed=dashed)
+    log(f"Wrote {output_path}  ({n_lines} lines, {len(dashed)} dashed, "
+        f"{len(curves)} polylines, {len(rounds)} circles/arcs, "
+        f"{len(words)} text entities)")
     return dict(output=output_path, lines=n_lines, curves=len(curves),
                 words=len(words), review=n_review, scale=scale,
                 units="feet" if units_feet else "pixels", size=gray.shape)
