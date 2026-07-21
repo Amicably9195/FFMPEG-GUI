@@ -340,11 +340,15 @@ def parse_dimension(text):
             # with two decimals on a drawing
             return inches
         return inches / 12.0 if inches > 0 else None
-    # 26-2" is a feet-inches label whose foot mark the OCR dropped -
-    # on a drawing it can only mean 26'-2"
-    m = re.fullmatch(r"[±+\-]?(\d{1,3})-(\d{1,2}(?:\.\d+)?)\"", t)
-    if m:
-        return float(m.group(1)) + float(m.group(2)) / 12.0
+    # 26-2" is a feet-inches label whose foot mark the OCR dropped, and
+    # 26'-2 is one whose inch mark was dropped. Exactly one mark missing is
+    # unambiguously feet-inches; bare "26-2" (a grid/room ref) is not
+    # touched - one mark must survive.
+    m = re.fullmatch(r"[±+\-]?(\d{1,3})(['!]?)-(\d{1,2}(?:\.\d+)?)(\"?)", t)
+    if m and (m.group(2) or m.group(4)):
+        inches = float(m.group(3))
+        if inches < 12:  # a real inches field is 0-11
+            return float(m.group(1)) + inches / 12.0
     return None
 
 
@@ -492,19 +496,75 @@ def estimate_scale(words, segs, tolerance=0.06, extra_segs=None,
     return scale
 
 
+def _collinear_groups(segs, angle_tol=3.0, offset_tol=4.0):
+    """Group segments that lie on the same infinite line (a dimension line
+    broken by its own text is several collinear pieces). Yields
+    (indices, endpoint_a, endpoint_b, direction) for each group's full span."""
+    n = len(segs)
+    ang = np.degrees(np.arctan2(segs[:, 3] - segs[:, 1],
+                                segs[:, 2] - segs[:, 0])) % 180.0
+    used = np.zeros(n, dtype=bool)
+    order = np.argsort(ang)
+    groups = []
+
+    def emit(band):
+        band = band[~used[band]]
+        if len(band) == 0:
+            return
+        a = math.radians(np.median(np.where(ang[band] > 170,
+                                            ang[band] - 180, ang[band])))
+        d = np.array([math.cos(a), math.sin(a)])
+        nvec = np.array([-d[1], d[0]])
+        mid = (segs[band][:, :2] + segs[band][:, 2:]) / 2
+        rho = mid @ nvec
+        o = np.argsort(rho)
+        k = 0
+        while k < len(o):
+            m = k
+            while m + 1 < len(o) and rho[o[m + 1]] - rho[o[m]] < offset_tol:
+                m += 1
+            grp = band[o[k:m + 1]]
+            k = m + 1
+            used[grp] = True
+            t = np.concatenate([segs[grp][:, :2] @ d, segs[grp][:, 2:] @ d])
+            r = float(np.mean(rho[np.searchsorted(band, grp)])) \
+                if False else float(np.mean((segs[grp][:, :2]
+                                             + segs[grp][:, 2:]) / 2 @ nvec))
+            base = r * nvec
+            pa = base + t.min() * d
+            pb = base + t.max() * d
+            groups.append((grp, pa, pb, d))
+
+    i = 0
+    while i < len(order):
+        a0 = ang[order[i]]
+        j = i
+        while j < len(order) and ang[order[j]] - a0 <= angle_tol:
+            j += 1
+        emit(order[i:j])
+        i = j
+    wrap = np.where((ang < angle_tol) | (ang > 180 - angle_tol))[0]
+    if len(wrap):
+        emit(wrap)
+    return groups
+
+
 def pair_dimensions(words, segs, scale=None, tol=0.10):
     """Recognize real dimension strings: a parsed dimension label sitting ON
-    the line it annotates (centered, within a couple of text-heights).
-    When a scale is known the pairing must also agree with it. Returns
-    [(word, seg_index)] - anything not confidently paired stays as plain
-    line + text (faithful: no guessing)."""
+    the line it annotates. The line is a COLLINEAR GROUP, so a dimension
+    line broken by its own text still pairs. When a scale is known the
+    pairing must also agree with it. Returns [(word, (x1,y1,x2,y2))] -
+    anything not confidently paired stays plain line + text (no guessing)."""
     if len(segs) == 0:
         return []
-    length = np.hypot(segs[:, 2] - segs[:, 0], segs[:, 3] - segs[:, 1])
-    angle = np.degrees(np.arctan2(segs[:, 3] - segs[:, 1],
-                                  segs[:, 2] - segs[:, 0])) % 180.0
+    groups = _collinear_groups(segs)
+    spans = []
+    for grp, pa, pb, d in groups:
+        span = float(np.hypot(*(pb - pa)))
+        ang = math.degrees(math.atan2(d[1], d[0])) % 180.0
+        spans.append((grp, pa, pb, d, span, ang))
     pairs = []
-    used = set()
+    used_groups = set()
     for w in words:
         if not _verifiable(w):
             continue
@@ -512,27 +572,27 @@ def pair_dimensions(words, segs, scale=None, tol=0.10):
         vertical = w["rotation"] in (90, 270)
         reading_len = w["h"] if vertical else w["w"]
         best = None
-        for i in range(len(segs)):
-            if i in used or length[i] < max(30.0, 1.05 * reading_len):
+        for gi, (grp, pa, pb, d, span, ang) in enumerate(spans):
+            if gi in used_groups or span < max(30.0, 1.05 * reading_len):
                 continue
-            ang_ok = (70 < angle[i] < 110) if vertical else \
-                     (angle[i] < 20 or angle[i] > 160)
+            ang_ok = (70 < ang < 110) if vertical else (ang < 20 or ang > 160)
             if not ang_ok:
                 continue
-            a = segs[i, :2]
-            d = (segs[i, 2:] - a) / length[i]
             n = np.array([-d[1], d[0]])
-            frac = float((c - a) @ d) / length[i]
-            perp = abs(float((c - a) @ n))
+            frac = float((c - pa) @ d) / span
+            perp = abs(float((c - pa) @ n))
             if not 0.12 <= frac <= 0.88 or perp > max(2.5 * w["cap"], 18.0):
                 continue
-            if scale and abs((w["dim"] / length[i]) / scale - 1.0) > tol:
+            if scale and abs((w["dim"] / span) / scale - 1.0) > tol:
                 continue
             if best is None or perp < best[0]:
-                best = (perp, i)
+                best = (perp, gi, pa, pb)
         if best is not None:
-            pairs.append((w, best[1]))
-            used.add(best[1])
+            _, gi, pa, pb = best
+            used_groups.add(gi)
+            pairs.append((w, (float(pa[0]), float(pa[1]),
+                              float(pb[0]), float(pb[1])),
+                          [int(k) for k in spans[gi][0]]))
     return pairs
 
 
@@ -719,6 +779,27 @@ def _merge_rounds(rounds):
     return out
 
 
+def _dominant_straight(pts, tol):
+    """Longest contiguous run of polyline vertices that is collinear within
+    tol. Returns (i, j) inclusive, or None. Catches a straight line carrying
+    a small tick/arrow hook at one end (dimension and leader lines)."""
+    n = len(pts)
+    best = None
+    for i in range(n - 1):
+        for j in range(n - 1, i, -1):
+            a, b = pts[i], pts[j]
+            chord = np.hypot(*(b - a))
+            if chord < 1:
+                continue
+            d = (b - a) / chord
+            nv = np.array([-d[1], d[0]])
+            if np.max(np.abs((pts[i:j + 1] - a) @ nv)) <= tol:
+                if best is None or chord > best[0]:
+                    best = (chord, i, j)
+                break
+    return None if best is None else (best[1], best[2])
+
+
 def vectorize_centerlines(ink, min_len=6.0, epsilon=1.4):
     """Thin ink to 1-px skeletons and trace single centerlines: one stroke on
     paper -> one LINE / one polyline, no doubled edges, no outlines.
@@ -753,13 +834,42 @@ def vectorize_centerlines(ink, min_len=6.0, epsilon=1.4):
                 d = (p2 - p1) / chord
                 n = np.array([-d[1], d[0]])
                 dev = float(np.max(np.abs((approx - p1) @ n)))
-            if chord >= min_len and dev <= max(2.5, 0.015 * chord):
+            straight_tol = max(2.5, 0.015 * chord)
+            if chord >= min_len and dev <= straight_tol:
                 segments.append((p1[0], p1[1], p2[0], p2[1]))
             else:
                 ent = _try_arc(arr.reshape(-1, 2), False)
                 if ent:
                     rounds.append(ent)
-                else:
+                    continue
+                # a long straight run carrying only a SMALL end tick/arrow
+                # (dimension and leader lines): emit the straight run as a
+                # LINE and keep the small hook faithfully. Only fires when
+                # the leftover ends are tick-sized - real geometry is never
+                # trimmed, so wall corners are untouched.
+                run = _dominant_straight(approx.astype(np.float64),
+                                         straight_tol)
+                emitted = False
+                if run is not None:
+                    i0, j0 = run
+                    ra = approx[i0].astype(np.float64)
+                    rb = approx[j0].astype(np.float64)
+                    ends = [approx[:i0 + 1], approx[j0:]]
+                    end_len = max(
+                        (np.hypot(*(e[-1] - e[0])) if len(e) > 1 else 0.0)
+                        for e in ends)
+                    tick_max = max(14.0, 0.06 * chord)
+                    if (np.hypot(*(rb - ra)) >= max(min_len, 0.85 * chord)
+                            and 0 < end_len <= tick_max):
+                        segments.append((ra[0], ra[1], rb[0], rb[1]))
+                        for head, tail in ((0, i0), (j0, len(approx) - 1)):
+                            if tail - head >= 1 and np.hypot(
+                                    *(approx[tail] - approx[head])) >= min_len:
+                                polys.append(
+                                    (approx[head:tail + 1].astype(np.float64),
+                                     False))
+                        emitted = True
+                if not emitted:
                     polys.append((approx.astype(np.float64), False))
     return ((np.array(segments) if segments else np.empty((0, 4))),
             polys, _merge_rounds(rounds))
@@ -1318,8 +1428,10 @@ def convert(input_path, output_path=None, *,
         pairs = pair_dimensions(words, segs,
                                 scale=scale if units_feet else None)
         if pairs:
-            drop = sorted({i for _, i in pairs}, reverse=True)
-            dim_pairs = [(w, segs[i].copy()) for w, i in pairs]
+            drop = sorted({i for _, _, idxs in pairs for i in idxs},
+                          reverse=True)
+            dim_pairs = [(w, np.asarray(span, dtype=np.float64))
+                         for w, span, _ in pairs]
             segs = np.delete(segs, drop, axis=0)
             for w, _ in dim_pairs:
                 w["as_dim"] = True

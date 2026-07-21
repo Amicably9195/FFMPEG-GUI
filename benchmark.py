@@ -32,6 +32,9 @@ MARGIN = 120
 def _dim_label(feet):
     whole = int(feet)
     inches = round((feet - whole) * 12)
+    if inches == 12:          # rounding rolled a foot - carry it
+        whole += 1
+        inches = 0
     if inches == 0:
         return f"{whole}'-0\""
     return f"{whole}'-{inches}\""
