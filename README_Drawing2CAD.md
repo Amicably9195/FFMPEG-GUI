@@ -28,6 +28,25 @@ Dirty scans (old photocopies, blueprints, faxes) are detected automatically
 by their speckle grain and get a deep-clean pass: median filtering, a more
 sensitive threshold for faint lines, and higher noise floors.
 
+## CAD files in, DWG out (translation tier)
+
+**CAD project files are already vector data**, so converting them is exact
+translation, not tracing:
+
+- **DXF in / DXF out** works out of the box (built in).
+- **DWG or DGN input**, and **DWG/DGN output**, need a free local converter —
+  the **ODA File Converter**
+  (https://www.opendesign.com/guestfiles/oda_file_converter). Install it once
+  (like Tesseract); the app finds it automatically, or set the
+  `ODA_CONVERTER` environment variable to its path. LibreDWG's
+  `dwg2dxf`/`dxf2dwg` are also detected as a fallback for DWG.
+- Without a converter, DWG/DGN output **falls back to DXF** (which both
+  AutoCAD and MicroStation open natively) with a clear message — nothing
+  breaks.
+
+In the GUI, pick the **Output** format (DXF / DWG / DGN). On the command line,
+just give the output an extension: `scan2cad.py drawing.jpg -o drawing.dwg`.
+
 DXF opens directly in **AutoCAD** and **MicroStation** (in MicroStation just
 open the .dxf and *Save As* .dgn if you want a native file). Everything is on
 separate layers, so you can change line weights, recolor, or delete the whole

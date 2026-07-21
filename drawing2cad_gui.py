@@ -32,7 +32,7 @@ MUTED   = "#888480"; GREEN   = "#4CAF50"
 YELLOW  = "#FFC107"; RED     = "#E85454"
 
 IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp",
-              ".pdf")
+              ".pdf", ".dwg", ".dxf", ".dgn")
 
 
 class Drawing2CADApp(_BASE):
@@ -135,6 +135,16 @@ class Drawing2CADApp(_BASE):
                         variable=self.v_smart, fg_color=ACCENT,
                         hover_color=ACCENT2,
                         font=("Segoe UI", 12)).pack(side="left", padx=8)
+        ctk.CTkLabel(orow3, text="Output:", text_color=MUTED,
+                     font=("Segoe UI", 12)).pack(side="left", padx=(18, 4))
+        self.v_fmt = tk.StringVar(value="DXF")
+        ctk.CTkOptionMenu(orow3, values=["DXF", "DWG", "DGN"],
+                          variable=self.v_fmt, width=80, fg_color=BG_INPUT,
+                          button_color=ACCENT, button_hover_color=ACCENT2
+                          ).pack(side="left")
+        ctk.CTkLabel(orow3, text="(DWG/DGN need the free ODA converter)",
+                     text_color=MUTED, font=("Segoe UI", 11)
+                     ).pack(side="left", padx=8)
 
         # convert
         self.btn = ctk.CTkButton(self, text="Convert to DXF",
@@ -218,8 +228,13 @@ class Drawing2CADApp(_BASE):
             self._log(f"\n=== {os.path.basename(path)} ===")
             self._set_status(f"Converting {os.path.basename(path)} ...", YELLOW)
             try:
+                ext = "." + self.v_fmt.get().lower()
+                out = os.path.splitext(path)[0] + "_cad" + ext \
+                    if os.path.splitext(path)[1].lower() in (
+                        ".dwg", ".dxf", ".dgn") \
+                    else os.path.splitext(path)[0] + ext
                 stats = scan2cad.convert(
-                    path,
+                    path, out,
                     scale=self._float(self.e_scale, 1.0),
                     do_page_crop=self.v_crop.get(),
                     do_deskew=self.v_deskew.get(),

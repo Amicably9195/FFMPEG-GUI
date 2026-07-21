@@ -1286,6 +1286,31 @@ def convert(input_path, output_path=None, *,
     """Run the whole image -> DXF pipeline. Returns a stats dict.
     PDFs are routed to pdf2cad: vector pages are lifted exactly,
     scanned pages come back through this pipeline at 300 DPI."""
+    import cad_io
+    if input_path.lower().endswith(cad_io.CAD_INPUT_EXTS):
+        # CAD files are already vector data - translate, don't trace
+        if output_path is None:
+            output_path = os.path.splitext(input_path)[0] + "_out.dxf"
+        out_ext = os.path.splitext(output_path)[1].lower()
+        if out_ext not in (".dxf", ".dwg", ".dgn"):
+            output_path = os.path.splitext(output_path)[0] + ".dxf"
+            out_ext = ".dxf"
+        tmp_dxf = (output_path if out_ext == ".dxf"
+                   else os.path.splitext(output_path)[0] + ".dxf")
+        cad_io.to_dxf(input_path, tmp_dxf, log=log)
+        if out_ext != ".dxf":
+            if not cad_io.from_dxf(tmp_dxf, output_path, log=log):
+                log(f"No CAD converter found - kept {out_ext.upper()[1:]} "
+                    f"as DXF: {tmp_dxf}")
+                output_path = tmp_dxf
+        import ezdxf
+        doc = ezdxf.readfile(tmp_dxf)
+        n = sum(1 for _ in doc.modelspace())
+        log(f"Translated {os.path.basename(input_path)} -> "
+            f"{os.path.basename(output_path)} ({n} entities, exact).")
+        return dict(output=output_path, entities=n, units="cad",
+                    translated=True)
+
     if input_path.lower().endswith(".pdf"):
         import pdf2cad
         return pdf2cad.convert_pdf(
@@ -1299,6 +1324,11 @@ def convert(input_path, output_path=None, *,
             ocr_min_conf=ocr_min_conf)
     if output_path is None:
         output_path = os.path.splitext(input_path)[0] + ".dxf"
+    # DWG/DGN output: vectorize to a sibling DXF, convert at the end
+    final_output = output_path
+    out_ext = os.path.splitext(output_path)[1].lower()
+    if out_ext in (".dwg", ".dgn"):
+        output_path = os.path.splitext(output_path)[0] + ".dxf"
 
     log(f"Reading {os.path.basename(input_path)} ...")
     gray = load_gray(input_path)
@@ -1474,6 +1504,13 @@ def convert(input_path, output_path=None, *,
     log(f"Wrote {output_path}  ({n_lines} lines, {len(dashed)} dashed, "
         f"{len(curves)} polylines, {len(rounds)} circles/arcs, "
         f"{len(dim_pairs)} dimensions, {len(words)} text entities)")
+    if final_output != output_path:  # DWG/DGN requested
+        import cad_io
+        if cad_io.from_dxf(output_path, final_output, log=log):
+            output_path = final_output
+        else:
+            log(f"No CAD converter found - saved DXF instead "
+                f"(opens in AutoCAD & MicroStation): {output_path}")
     return dict(output=output_path, lines=n_lines, curves=len(curves),
                 words=len(words), review=n_review, scale=scale,
                 units="feet" if units_feet else "pixels", size=gray.shape)
