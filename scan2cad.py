@@ -1133,6 +1133,28 @@ def snap_topology(segs, tol=4.0):
     return np.hstack([snapped[:n], snapped[n:]])
 
 
+def snap_lines_to_polylines(segs, polys, tol=4.0):
+    """Close line-to-polyline junctions: a line endpoint within tol of a
+    polyline vertex snaps onto that vertex (a wall meeting a curved/traced
+    boundary). Endpoints move at most tol, and never past a third of their
+    own segment - correction, not redrawing. Mutates segs in place."""
+    if len(segs) == 0 or not polys:
+        return segs
+    verts = np.vstack([p for p, _ in polys]) if polys else np.empty((0, 2))
+    if len(verts) == 0:
+        return segs
+    seg_len = np.hypot(segs[:, 2] - segs[:, 0], segs[:, 3] - segs[:, 1])
+    for i in range(len(segs)):
+        cap = min(tol, seg_len[i] / 3.0)
+        for e0, e1 in ((0, 2), (2, 0)):  # each endpoint; e1 is the far end
+            p = segs[i, [e0, e0 + 1]]
+            dv = np.abs(verts - p).max(axis=1)
+            j = int(np.argmin(dv))
+            if dv[j] <= cap and np.hypot(*(verts[j] - p)) <= cap:
+                segs[i, [e0, e0 + 1]] = verts[j]
+    return segs
+
+
 def residual_curves(ink, segs, width, min_area=40, epsilon=1.8):
     """Trace whatever ink the straight segments didn't explain (curves, circles,
     symbols) as polylines. Returns list of (points Nx2, closed)."""
@@ -1380,6 +1402,8 @@ def convert(input_path, output_path=None, *,
     # (closed loops get a lower bar: small circles are real symbols)
     curves = [c for c in curves
               if _feature_size(c[0]) >= (18.0 if c[1] else 50.0)]
+    if len(segs) and curves:
+        segs = snap_lines_to_polylines(segs, curves)
 
     # dimension parsing, junk filtering, scale verification, review flagging
     units_feet = False

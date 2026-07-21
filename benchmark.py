@@ -279,12 +279,18 @@ def score(dxf_path, truth_px, labels, img_h, true_scale, used_scale=1.0,
         if len(near) + len(nearv) == 0:
             continue
         joints_tot += 1
-        if len(nearv) and len(near) == 0:
+        if len(near) == 0:
             joints_ok += 1  # a polyline runs through - inherently joined
             continue
         if len(near) >= 2:
             spread = np.linalg.norm(near - near.mean(axis=0), axis=1).max()
             if spread <= 0.75:
+                joints_ok += 1
+        elif len(nearv):
+            # one line endpoint meeting a polyline vertex - closed if they
+            # coincide
+            gap = np.abs(np.array(nearv) - near[0]).max(axis=1).min()
+            if gap <= 0.75:
                 joints_ok += 1
     return (coverage, precision, hits, len(labels), units_feet, scale_err,
             circ_ok, len(truth_circ), dash_ok, len(truth_dash),
