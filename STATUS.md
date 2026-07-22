@@ -102,17 +102,60 @@ a typical machine:
 
 ---
 
+## Core engineering principles
+
+These are structural — they define *how* trust is built, not just claimed.
+
+- **Success is defined by user trust, not a headline accuracy number.** The
+  goal is not "99.5% OCR"; it is *professionals trust the output because the
+  software faithfully preserves what it sees, clearly communicates
+  uncertainty, and never invents information.* Accuracy is one measurement of
+  that trust, not the whole of it.
+- **Confidence everywhere.** Every recovered object carries a 0–1 confidence
+  (text, circle, arc, dimension, dashed line, scale, …), so the review screen
+  surfaces the least-certain items first and human review is fast.
+- **Never lose information.** Even an object the software cannot classify is
+  preserved — unknown symbol → kept as geometry, unknown text → crop + geometry
+  kept, unknown linetype → original segments kept. The system degrades
+  gracefully; it never deletes or silently simplifies.
+- **Provenance.** Every object remembers where it came from: source image
+  coordinates, confidence, reconstruction method, review status. This metadata
+  rides in a sidecar (not baked into the DXF) and is invaluable for debugging
+  and for judging whether a change actually helped.
+- **Detection is separate from reconstruction.** Detection answers *what
+  exists?*; reconstruction answers *how should it be represented in CAD?*
+  Keeping them independent keeps future improvements clean.
+
+## Architecture: a staged pipeline
+
+The program is organized as a pipeline, not a bag of features, so any stage
+can be swapped for a better implementation without touching the rest:
+
+```
+Input → Preprocessing → Geometry Detection → Text Detection →
+Classification → CAD Reconstruction → Verification → Review → Export
+```
+
+A **plugin-friendly** direction is planned early: OCR engines, CAD exporters,
+validators, drawing-type modules, and symbol libraries should each be
+swappable. The converter backend (ODA / LibreDWG) already works this way.
+
 ## Development philosophy
 
 Every feature is developed incrementally:
 
 1. implement one capability
-2. benchmark it
+2. benchmark it (the benchmark is **versioned** — currently v1.0 — so a gain
+   is always attributable to a better algorithm, not a changed benchmark)
 3. verify no regressions
 4. commit
 5. move to the next capability
 
-Small, measurable improvements are preferred over large rewrites.
+Small, measurable improvements are preferred over large rewrites. A permanent
+**visual regression library** (best case, average scan, poor scan, folded,
+faded survey, skewed photo, rotated scan, blueprint copy, dense sheet) is
+planned alongside the numeric benchmark so every release is checked against
+the same real drawings.
 
 ---
 

@@ -26,6 +26,11 @@ import numpy as np
 import ezdxf
 import scan2cad
 
+# Benchmark version - bump when the plans, damage model, or metrics change,
+# so a score is always comparable only within the same version. This lets us
+# tell whether a gain came from a better algorithm or a changed benchmark.
+BENCHMARK_VERSION = "1.0"
+
 PX_PER_FT = 14.0
 MARGIN = 120
 
@@ -354,7 +359,9 @@ def main():
 
     def frac(a, b):
         return f"{a}/{b} ({(100.0 * a / b) if b else 0:.0f}%)"
-    print("\n" + "=" * 44 + "\n  PROJECT HEALTH PANEL\n" + "=" * 44)
+    print("\n" + "=" * 44 +
+          f"\n  PROJECT HEALTH PANEL  (benchmark v{BENCHMARK_VERSION})\n"
+          + "=" * 44)
     print(f"  Line coverage      {pct(cov)}")
     print(f"  Line precision     {pct(prec)}")
     print(f"  OCR / text         {pct(txt)}")

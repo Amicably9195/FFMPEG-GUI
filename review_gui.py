@@ -35,10 +35,14 @@ class ReviewApp(ctk.CTkToplevel):
         self.configure(fg_color=BG_DARK)
         self.json_path = json_path
         self.image, words, self.meta = corrections.load_review(json_path)
-        # review-flagged first, then the rest (confirming good reads is data too)
-        self.words = [w for w in words if w.get("review")] + \
-                     [w for w in words if not w.get("review")]
-        self.only_flagged = [w for w in words if w.get("review")]
+        # least-certain first: flagged items sorted by ascending confidence,
+        # then the confident ones (confirming good reads is training data too)
+        flagged = sorted((w for w in words if w.get("review")),
+                         key=lambda w: w.get("conf", 0))
+        rest = sorted((w for w in words if not w.get("review")),
+                      key=lambda w: w.get("conf", 0))
+        self.words = flagged + rest
+        self.only_flagged = flagged
         self.i = 0
         self.fixes = []      # (new_text, original_text)
         self.pairs = []      # (crop, text)

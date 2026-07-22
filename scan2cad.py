@@ -684,16 +684,19 @@ def _try_arc(pts, closed):
     if fit is None:
         return None
     cx, cy, r, resid = fit
-    if not 6.0 <= r <= 3000.0 or resid > max(2.0, 0.035 * r):
+    lim = max(2.0, 0.035 * r)
+    if not 6.0 <= r <= 3000.0 or resid > lim:
         return None
+    # confidence: how tightly the traced pixels fit the ideal circle
+    conf = float(max(0.0, min(1.0, 1.0 - resid / lim)))
     ang = np.unwrap(np.arctan2(pts[:, 1] - cy, pts[:, 0] - cx))
     span = math.degrees(abs(float(ang[-1] - ang[0])))
     if closed or span >= 355.0:
-        return ("circle", cx, cy, r)
+        return ("circle", cx, cy, r, conf)
     if span < 40.0:
         return None  # too shallow to assert an arc faithfully
     return ("arc", cx, cy, r, tuple(pts[0]), tuple(pts[-1]),
-            tuple(pts[len(pts) // 2]))
+            tuple(pts[len(pts) // 2]), conf)
 
 
 def detect_circles(ink, min_r=8, max_r=300):
@@ -722,21 +725,25 @@ def detect_circles(ink, min_r=8, max_r=300):
             continue
         dist = np.hypot(pts[:, 0] - cx, pts[:, 1] - cy)
         # a ring, not a disk or a glyph: nearly all pixels at one radius
-        if np.percentile(np.abs(dist - r), 95) > max(3.5, 0.10 * r):
+        p95 = np.percentile(np.abs(dist - r), 95)
+        ring_lim = max(3.5, 0.10 * r)
+        if p95 > ring_lim:
             continue
         # nearly the full turn present
         ang = np.arctan2(pts[:, 1] - cy, pts[:, 0] - cx)
         filled = len(np.unique((ang // (2 * np.pi / 36)).astype(int)))
         if filled < 33:
             continue
-        accepted.append(("circle", cx + x, cy + y, r))
+        # confidence: ring tightness x completeness of the turn
+        conf = float(max(0.0, 1.0 - p95 / ring_lim) * (filled / 36.0))
+        accepted.append(("circle", cx + x, cy + y, r, conf))
         out[comp == i] = 0
     return accepted, out
 
 
 def _arc_span(arc):
-    """Angular coverage (deg) of an ('arc', cx, cy, r, p1, p2, pm) entity."""
-    _, cx, cy, _, p1, p2, pm = arc
+    """Angular coverage (deg) of an ('arc', cx, cy, r, p1, p2, pm, conf)."""
+    cx, cy, p1, p2, pm = arc[1], arc[2], arc[4], arc[5], arc[6]
 
     def ang(p):
         return math.degrees(math.atan2(p[1] - cy, p[0] - cx)) % 360.0
@@ -770,7 +777,8 @@ def _merge_rounds(rounds):
                 and sum(_arc_span(g) for g in group) > 300.0):
             out.append(("circle",
                         float(np.mean([g[1] for g in group])),
-                        float(np.mean([g[2] for g in group])), radius))
+                        float(np.mean([g[2] for g in group])), radius,
+                        float(min(g[7] for g in group))))
             continue
         for g in group:
             # a faithful arc entity must be big enough to not be a glyph
@@ -1438,6 +1446,7 @@ def convert(input_path, output_path=None, *,
 
     # dimension parsing, junk filtering, scale verification, review flagging
     units_feet = False
+    scale_conf = None
     for wd in words:
         wd["dim"] = parse_dimension(wd["text"])
         if flag_review and wd["conf"] < review_conf:
@@ -1468,6 +1477,9 @@ def convert(input_path, output_path=None, *,
         if ftpx:
             scale = ftpx
             units_feet = True
+            # scale confidence = fraction of checked dimensions that agreed
+            if checked:
+                scale_conf = (len(checked) - len(bad)) / len(checked)
             log(f"Scale verified against drawn lines: 1 px = {ftpx:.5f} ft "
                 f"-> DXF output is in FEET. "
                 f"{len(checked) - len(bad)} dimensions agree"
@@ -1505,14 +1517,26 @@ def convert(input_path, output_path=None, *,
     log(f"Wrote {output_path}  ({n_lines} lines, {len(dashed)} dashed, "
         f"{len(curves)} polylines, {len(rounds)} circles/arcs, "
         f"{len(dim_pairs)} dimensions, {len(words)} text entities)")
-    if review_out and words:
+    if review_out:
         # sidecar for the review/correction screen (Phase C data flywheel)
         try:
             import corrections
-            corrections.export_review(gray_ocr, words + [
-                w for w, _ in dim_pairs], output_path)
+            if words:
+                corrections.export_review(gray_ocr, words + [
+                    w for w, _ in dim_pairs], output_path)
         except Exception as exc:
             log(f"(review export skipped: {exc})")
+        # provenance: every recovered object with confidence + origin
+        try:
+            import provenance
+            records = provenance.build_records(
+                segments=segs, dashed=dashed, rounds=rounds, curves=curves,
+                words=words, dims=dim_pairs, scale=scale,
+                units_feet=units_feet, scale_conf=scale_conf)
+            provenance.export(records, output_path, scale=scale,
+                              units_feet=units_feet)
+        except Exception as exc:
+            log(f"(provenance export skipped: {exc})")
 
     if final_output != output_path:  # DWG/DGN requested
         import cad_io
