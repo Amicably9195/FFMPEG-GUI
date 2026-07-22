@@ -147,11 +147,20 @@ class Drawing2CADApp(_BASE):
                      ).pack(side="left", padx=8)
 
         # convert
-        self.btn = ctk.CTkButton(self, text="Convert to DXF",
+        crow = ctk.CTkFrame(self, fg_color=BG_DARK)
+        crow.pack(fill="x", padx=16, pady=8)
+        self.btn = ctk.CTkButton(crow, text="Convert to DXF",
                                  command=self._convert,
                                  fg_color=ACCENT, hover_color=ACCENT2,
                                  font=("Segoe UI", 15, "bold"), height=42)
-        self.btn.pack(fill="x", padx=16, pady=8)
+        self.btn.pack(side="left", fill="x", expand=True)
+        self.btn_review = ctk.CTkButton(crow, text="Review & correct text",
+                                        command=self._review, width=200,
+                                        height=42, fg_color=BG_INPUT,
+                                        hover_color=BORDER, state="disabled",
+                                        font=("Segoe UI", 13))
+        self.btn_review.pack(side="left", padx=(8, 0))
+        self._last_reviews = []
 
         # log
         self.log_box = ctk.CTkTextbox(self, fg_color=BG_MID, text_color=TEXT,
@@ -235,6 +244,7 @@ class Drawing2CADApp(_BASE):
                     else os.path.splitext(path)[0] + ext
                 stats = scan2cad.convert(
                     path, out,
+                    review_out=True,
                     scale=self._float(self.e_scale, 1.0),
                     do_page_crop=self.v_crop.get(),
                     do_deskew=self.v_deskew.get(),
@@ -250,6 +260,9 @@ class Drawing2CADApp(_BASE):
                     log=self._log)
                 ok += 1
                 self._log(f"DONE -> {stats['output']}")
+                side = os.path.splitext(stats["output"])[0] + ".review.json"
+                if os.path.exists(side):
+                    self._last_reviews.append(side)
             except Exception:
                 failed += 1
                 self._log("ERROR:\n" + traceback.format_exc())
@@ -258,7 +271,18 @@ class Drawing2CADApp(_BASE):
                          f"DXF saved next to each image.", color)
         self.after(0, lambda: self.btn.configure(state="normal",
                                                  text="Convert to DXF"))
+        if self._last_reviews:
+            self.after(0, lambda: self.btn_review.configure(state="normal"))
         self.busy = False
+
+    def _review(self):
+        if not self._last_reviews:
+            return
+        try:
+            import review_gui
+            review_gui.ReviewApp(self, self._last_reviews[-1])
+        except Exception as exc:
+            messagebox.showerror("Review", f"Couldn't open review:\n{exc}")
 
 
 if __name__ == "__main__":

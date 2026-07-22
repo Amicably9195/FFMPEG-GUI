@@ -121,6 +121,27 @@ Without Tesseract everything still works — you just get linework, no text.
 pyinstaller Drawing2CAD.spec
 ```
 
+## Review & correct the uncertain text (and teach the reader)
+
+Text the reader wasn't sure about is flagged on the hidden red review layer.
+The **Review & correct text** button (enabled after a conversion) opens a
+screen that shows each uncertain label next to a magnified crop of the
+drawing. Fix what's wrong, press Enter to keep — it's far faster than editing
+the DXF by hand in CAD.
+
+Two things happen with every fix:
+
+1. The corrected text is written back into the DXF and moved off the red
+   review layer onto the normal TEXT layer.
+2. The (image → correct text) pair is saved to a local training set
+   (`~/.drawing2cad_dataset`). These pairs are the raw material for
+   fine-tuning the offline reader on real drafting lettering — the honest
+   "learns from your drawings" loop. Nothing leaves your computer.
+
+Standalone: `python review_gui.py drawing.review.json`
+(the sidecar is written next to the DXF; add `--review` on the command line
+or it's automatic from the GUI).
+
 ## Tips for good results
 
 - **Shoot straight-on** with the whole sheet in frame and even lighting —

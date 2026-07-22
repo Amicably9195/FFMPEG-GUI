@@ -1278,6 +1278,7 @@ def convert(input_path, output_path=None, *,
             flag_review=True,
             deep_clean=True,
             smart_read=True,
+            review_out=False,
             review_conf=70,
             min_line_px=6.0,
             speck_px=8,
@@ -1319,7 +1320,7 @@ def convert(input_path, output_path=None, *,
             do_curves=do_curves, ortho_snap=ortho_snap,
             auto_scale=auto_scale, flag_review=flag_review,
             deep_clean=deep_clean, smart_read=smart_read,
-            review_conf=review_conf,
+            review_out=review_out, review_conf=review_conf,
             min_line_px=min_line_px, speck_px=speck_px,
             ocr_min_conf=ocr_min_conf)
     if output_path is None:
@@ -1504,6 +1505,15 @@ def convert(input_path, output_path=None, *,
     log(f"Wrote {output_path}  ({n_lines} lines, {len(dashed)} dashed, "
         f"{len(curves)} polylines, {len(rounds)} circles/arcs, "
         f"{len(dim_pairs)} dimensions, {len(words)} text entities)")
+    if review_out and words:
+        # sidecar for the review/correction screen (Phase C data flywheel)
+        try:
+            import corrections
+            corrections.export_review(gray_ocr, words + [
+                w for w, _ in dim_pairs], output_path)
+        except Exception as exc:
+            log(f"(review export skipped: {exc})")
+
     if final_output != output_path:  # DWG/DGN requested
         import cad_io
         if cad_io.from_dxf(output_path, final_output, log=log):
@@ -1558,6 +1568,9 @@ def main():
     ap.add_argument("--no-smart", action="store_true",
                     help="don't re-read labels with the offline neural "
                          "reader")
+    ap.add_argument("--review", action="store_true",
+                    help="write a .review.json sidecar for the text "
+                         "correction screen (python review_gui.py ...)")
     ap.add_argument("--review-conf", type=float, default=70,
                     help="OCR confidence below this is flagged (default 70)")
     ap.add_argument("--min-line", type=float, default=6.0,
@@ -1579,6 +1592,7 @@ def main():
             flag_review=not args.no_review,
             deep_clean=not args.no_clean,
             smart_read=not args.no_smart,
+            review_out=args.review,
             review_conf=args.review_conf,
             min_line_px=args.min_line,
             speck_px=args.speck)
