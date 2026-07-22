@@ -18,6 +18,7 @@ import argparse
 import os
 import random
 import tempfile
+import time
 
 import cv2
 import numpy as np
@@ -318,34 +319,54 @@ def main():
         img_path = os.path.join(outdir, f"bench_{i}.png")
         cv2.imwrite(img_path, img)
         dxf_path = os.path.join(outdir, f"bench_{i}.dxf")
+        t0 = time.perf_counter()
         stats = scan2cad.convert(img_path, dxf_path, do_page_crop=False,
                                  do_deskew=False, log=lambda m: None)
+        elapsed = time.perf_counter() - t0
         (cov, prec, hits, total, feet, serr, cok, ctot, dok, dtot,
          jok, jtot, mok, mtot) = score(
             dxf_path, truth_px, labels, img.shape[0], 1.0 / PX_PER_FT,
             used_scale=stats.get("scale", 1.0), truth_circ=truth_circ,
             truth_dash=truth_dash, truth_dims=dims)
         rows.append((i, dirty, cov, prec, hits, total, feet, cok, ctot,
-                     dok, dtot, jok, jtot, mok, mtot))
-        stag = (f"YES (err {serr * 100:.1f}%)" if feet else "no")
+                     dok, dtot, jok, jtot, mok, mtot, serr, elapsed))
+        stag = (f"YES {serr * 100:.1f}%" if feet else "no")
         print(f"plan {i} ({'dirty' if dirty else 'clean'}): "
-              f"line coverage {cov * 100:5.1f}%  precision {prec * 100:5.1f}%  "
-              f"text {hits}/{total}  circles {cok}/{ctot}  "
-              f"dashed {dok}/{dtot}  joints {jok}/{jtot}  "
-              f"dims {mok}/{mtot}  scale-to-feet {stag}")
+              f"cover {cov * 100:5.1f}%  prec {prec * 100:5.1f}%  "
+              f"text {hits}/{total}  circ {cok}/{ctot}  dash {dok}/{dtot}  "
+              f"joint {jok}/{jtot}  dim {mok}/{mtot}  scale {stag}  "
+              f"{elapsed:.1f}s")
 
-    cov = np.mean([r[2] for r in rows])
-    prec = np.mean([r[3] for r in rows])
+    def agg(idx):
+        return np.mean([r[idx] for r in rows])
+    cov, prec = agg(2), agg(3)
     txt = sum(r[4] for r in rows) / max(1, sum(r[5] for r in rows))
     scl = sum(1 for r in rows if r[6])
     circ = (sum(r[7] for r in rows), sum(r[8] for r in rows))
     dsh = (sum(r[9] for r in rows), sum(r[10] for r in rows))
     jnt = (sum(r[11] for r in rows), sum(r[12] for r in rows))
     dm = (sum(r[13] for r in rows), sum(r[14] for r in rows))
-    print(f"\nOVERALL: coverage {cov * 100:.1f}%  precision {prec * 100:.1f}%  "
-          f"text {txt * 100:.1f}%  circles {circ[0]}/{circ[1]}  "
-          f"dashed {dsh[0]}/{dsh[1]}  joints {jnt[0]}/{jnt[1]}  "
-          f"dims {dm[0]}/{dm[1]}  scale locked {scl}/{len(rows)}")
+    serrs = [r[15] for r in rows if r[15] is not None]
+    times = [r[16] for r in rows]
+
+    def pct(x):
+        return f"{x * 100:.1f}%"
+
+    def frac(a, b):
+        return f"{a}/{b} ({(100.0 * a / b) if b else 0:.0f}%)"
+    print("\n" + "=" * 44 + "\n  PROJECT HEALTH PANEL\n" + "=" * 44)
+    print(f"  Line coverage      {pct(cov)}")
+    print(f"  Line precision     {pct(prec)}")
+    print(f"  OCR / text         {pct(txt)}")
+    print(f"  Dimension accuracy {frac(dm[0], dm[1])}")
+    print(f"  Circles / arcs     {frac(circ[0], circ[1])}")
+    print(f"  Dashed linetypes   {frac(dsh[0], dsh[1])}")
+    print(f"  Corner closure     {frac(jnt[0], jnt[1])}")
+    print(f"  Scale locked       {frac(scl, len(rows))}"
+          + (f", err {np.mean(serrs) * 100:.2f}%" if serrs else ""))
+    print(f"  Processing time    {np.mean(times):.2f}s avg, "
+          f"{max(times):.2f}s max  (synthetic plans)")
+    print("=" * 44)
 
 
 if __name__ == "__main__":
