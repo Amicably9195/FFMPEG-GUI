@@ -1,7 +1,12 @@
 # Drawing2CAD — State of the Project
 
 *Kept current as the project evolves. For the phased engineering plan see
-ROADMAP.md; for measured numbers run `python benchmark.py`.*
+ROADMAP.md; for measured numbers run `python benchmark.py`. For how sessions
+are run by interchangeable AI engineers, see WORKFLOW.md and AI_RULES.md.*
+
+> **New here (human or AI)?** Read `AI_RULES.md` (the constitution) and
+> `HANDOFF.md` (what's in flight right now) first, then follow `WORKFLOW.md`.
+> The repository is the shared brain — every fact lives in these docs.
 
 ---
 
