@@ -8,6 +8,39 @@ numbers, state at stop.
 
 ---
 
+## 2026-07-23 — Claude Code — Dataset infrastructure (TASKS.md P0, part 1)
+
+**Task:** Build `dataset_builder.py` — the curated benchmark + training
+corpus framework and synthetic degradation pipeline (owner's dataset-strategy
+request; DECISIONS.md #7).
+
+**Baseline benchmark (before):** coverage 96.3%, precision 99.0%, corners
+24/24, actionable lint 0. (dataset_builder is a new standalone tool; the
+numeric benchmark does not exercise it.)
+
+**Did:**
+- Wrote `dataset_builder.py`: approved-source registry (8 curated sources,
+  never-scrape), 11-category on-disk suite, synthetic degradation library (12
+  degradations → 7 recipes), ground-truth-preserving synthetic generation
+  (reuses `benchmark.generate_plan`/`render`), per-sample metadata,
+  content-hash train/val/benchmark split with dedup, CLI.
+- Fixes during build: matched `generate_plan`'s `(segs,labels,dims,circles,
+  dashes)` signature and its python-`random`-vs-numpy-rng split; added a
+  `_jsonable` numpy→python sanitizer for metadata dumps.
+- Tested end-to-end in scratchpad (`DRAWING2CAD_DATA` override): init → synth
+  8 → degrade 6 → split → stats all pass; ground truth (15 segs / 1 circ / 1
+  dash) and split assignment verified; degraded variants correctly inherit
+  their parent drawing's split (no cross-split leakage).
+
+**After benchmark:** unchanged — coverage 96.3%, precision 99.0%, corners
+24/24, actionable lint 0.
+
+**State at stop:** committed and pushed; tree clean. Framework + synthetic
+done. Remaining P0 (wiring real curated fetchers + real regression suite) is
+network-gated — blocked in this sandbox, queued in TASKS.md.
+
+---
+
 ## 2026-07-23 — Claude Code — Collaboration architecture
 
 **Task:** Stand up the multi-AI coordination layer so Claude Code and

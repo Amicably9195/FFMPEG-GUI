@@ -21,24 +21,22 @@ _None. (When you start a task, move it here and note it in HANDOFF.md.)_
 
 ## Queue
 
-### P0 — Curated dataset + benchmark-suite infrastructure
-- **Why:** Reading and hard-case handling are the ceiling on everything.
-  We need a large, legally clean, categorized corpus and a synthetic
-  degradation pipeline to train and to benchmark against real difficulty.
-- **Scope:** `dataset_builder.py` — approved-source registry (US gov records,
-  public CAD sample libraries, universities, open gov engineering manuals),
-  category folders (`benchmark/vector/`, `clean_scans/`, `poor_scans/`,
-  `phone_photos/`, `surveys/`, `architectural/`, `site_plans/`,
-  `title_blocks/`, `handwriting/`, `dimensions/`, `symbols/`), a synthetic
-  degradation library (rotation, skew, blur, scanner noise, JPEG, stains,
-  folds, shadows, faded ink, low DPI, photocopy, perspective), metadata per
-  sample, train/validation/benchmark split, dedup.
-- **Dependencies:** none for the framework + synthetic generation (fully
-  local). Actual downloads are network-gated and happen on a connected
-  machine; ship the registry + fetch code, document the sources.
-- **Effort:** 1–2 sessions (framework first, degradation library second).
-- **Benchmark affected:** enables a real regression-image suite; expands
-  what `benchmark.py` can grade (currently synthetic plans only).
+### P0 — Wire curated fetchers + build the real regression suite
+- **Why:** `dataset_builder.py` framework + synthetic pipeline now exist
+  (see Done). What remains needs a network and human license confirmation:
+  turn the documented approved sources into actual downloaders, pull a first
+  batch, and stand up a real-drawing regression suite the benchmark can grade
+  alongside the synthetic plans.
+- **Scope:** for each entry in `APPROVED_SOURCES`, confirm terms + a stable
+  path, add a `fetch` callable (lands in `dataset_builder.fetch`, never an
+  ad-hoc scrape), run `fetch` → `split` → then extend `benchmark.py` to score
+  the `benchmark` split per category. Also add an `ingest` command for
+  manually-downloaded files.
+- **Dependencies:** network access + per-source license confirmation
+  (recorded in DECISIONS.md). **Blocked in the current sandbox** (no network).
+- **Effort:** 1 session per few sources once connected.
+- **Benchmark affected:** adds real-drawing categories to the benchmark
+  (today: synthetic plans only).
 - **Rule:** curated + synthetic only. **Never scrape the open web.**
 
 ### P1 — Text tier: synthetic pre-training
@@ -101,6 +99,13 @@ _None. (When you start a task, move it here and note it in HANDOFF.md.)_
 
 ## Done (recent — full history in CHANGELOG.md)
 
+- Dataset infrastructure framework: `dataset_builder.py` — approved-source
+  registry (curated, never scraped), 11 category folders, synthetic
+  degradation library (12 degradations + 7 real-world recipes),
+  ground-truth-preserving synthetic generation (reuses `benchmark.py`),
+  per-sample metadata, content-hash train/val/benchmark split with dedup.
+- Multi-AI collaboration architecture (AI_RULES, WORKFLOW, TASKS, CHANGELOG,
+  DECISIONS, WORKLOG, HANDOFF) — the repo as shared brain.
 - Verification/lint pass (advisory, never auto-fix) — reviewer priority #2.
 - Confidence scoring + provenance sidecar; versioned benchmark (v1.0).
 - STATUS.md living doc + benchmark health panel.

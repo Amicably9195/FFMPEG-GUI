@@ -11,6 +11,30 @@ Format: `YYYY-MM-DD — <engineer> — <summary>` then bullets.
 
 ## Unreleased
 
+### 2026-07-23 — Claude Code — Dataset infrastructure (framework + synthetic)
+- `dataset_builder.py`: the curated benchmark + training corpus, curated +
+  synthetic only (DECISIONS.md #7 — never scrape the web).
+  - Approved-source registry: 8 named, licensed public sources (LoC HABS/HAER,
+    USGS, GSA, NPS, ODA/ezdxf CAD samples, university courseware, USACE
+    manuals); `fetch` is the single sanctioned download entry point,
+    documented-only until per-source terms are confirmed.
+  - Benchmark suite on disk: 11 category folders (vector, clean_scans,
+    poor_scans, phone_photos, surveys, architectural, site_plans,
+    title_blocks, handwriting, dimensions, symbols), each raw/degraded/meta.
+  - Synthetic degradation library: 12 degradations (rotate, skew, perspective,
+    blur, scanner_noise, jpeg, stain, fold, shadow, faded_ink, low_dpi,
+    photocopy) composed into 7 real-world recipes (office_scan, old_photocopy,
+    phone_capture, faxed, archived_survey, ...); geometry-moving degradations
+    record their transform matrices so ground truth maps through.
+  - Synthetic drawing generation reuses `benchmark.generate_plan`/`render`
+    (one generator, no drift) and stores full pixel-space ground truth.
+  - Per-sample metadata sidecars; deterministic content-hash
+    train/validation/benchmark split with de-dup (variants of one drawing can
+    never leak across splits).
+  - CLI: init / sources / synth / degrade / fetch / split / stats.
+- Numeric benchmark unchanged (new standalone tool): coverage 96.3%,
+  precision 99.0%, corners 24/24, actionable lint 0.
+
 ### 2026-07-23 — Claude Code — Multi-AI collaboration architecture
 - Added the coordination layer that makes Claude Code and ChatGPT Codex
   interchangeable engineers working out of the repository:

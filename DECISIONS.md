@@ -97,7 +97,7 @@ human can't see. Low precision (crying wolf) destroys the report's value, so
 we optimize for the actionable few, not the noisy many.
 
 ## 007 — Curated + synthetic training data; never scrape the web
-*Accepted.*
+*Accepted. Implemented by `dataset_builder.py`.*
 
 **Context:** The tool needs a large corpus to train the reader and to
 benchmark real difficulty. Owner constraint: *"tell Claude not to randomly
