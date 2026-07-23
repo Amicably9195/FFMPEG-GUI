@@ -333,8 +333,16 @@ def main():
             dxf_path, truth_px, labels, img.shape[0], 1.0 / PX_PER_FT,
             used_scale=stats.get("scale", 1.0), truth_circ=truth_circ,
             truth_dash=truth_dash, truth_dims=dims)
+        lint_act, lint_info = 0, 0
+        lint_path = os.path.splitext(dxf_path)[0] + ".lint.json"
+        if os.path.exists(lint_path):
+            import json as _json
+            sev = _json.load(open(lint_path))["summary"]["by_severity"]
+            lint_act = sev.get("high", 0) + sev.get("medium", 0)
+            lint_info = sev.get("low", 0)
         rows.append((i, dirty, cov, prec, hits, total, feet, cok, ctot,
-                     dok, dtot, jok, jtot, mok, mtot, serr, elapsed))
+                     dok, dtot, jok, jtot, mok, mtot, serr, elapsed,
+                     lint_act, lint_info))
         stag = (f"YES {serr * 100:.1f}%" if feet else "no")
         print(f"plan {i} ({'dirty' if dirty else 'clean'}): "
               f"cover {cov * 100:5.1f}%  prec {prec * 100:5.1f}%  "
@@ -353,6 +361,8 @@ def main():
     dm = (sum(r[13] for r in rows), sum(r[14] for r in rows))
     serrs = [r[15] for r in rows if r[15] is not None]
     times = [r[16] for r in rows]
+    lint_act = sum(r[17] for r in rows)
+    lint_info = sum(r[18] for r in rows)
 
     def pct(x):
         return f"{x * 100:.1f}%"
@@ -373,6 +383,10 @@ def main():
           + (f", err {np.mean(serrs) * 100:.2f}%" if serrs else ""))
     print(f"  Processing time    {np.mean(times):.2f}s avg, "
           f"{max(times):.2f}s max  (synthetic plans)")
+    print(f"  Lint (actionable)  {lint_act}  "
+          f"(high+medium: duplicates/mismatches - should stay ~0)")
+    print(f"  Lint (info)        {lint_info}  "
+          f"(low: floating fragments)")
     print("=" * 44)
 
 

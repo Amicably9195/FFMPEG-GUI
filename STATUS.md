@@ -46,6 +46,11 @@ drawing *and* saves a labeled example locally for future model training
 (the software does not retrain itself on each edit — it collects the data a
 one-time fine-tune will use). Nothing leaves the machine.
 
+**Verification (lint):** an advisory pass flags likely defects — doubled
+walls, dimension-vs-geometry disagreements, floating lines — with location
+and severity, never auto-fixing. Trustworthy by design: it reports the
+actionable few, not hundreds of false alarms.
+
 **Guardrail:** a scored benchmark grades every change so quality can't
 silently regress.
 
@@ -88,11 +93,13 @@ a typical machine:
    pre-training (free), then fine-tune the local reader on the
    correction-flywheel data (**one-time GPU**, after a few hundred labeled
    examples are collected).
-2. **Verification / lint.** Flag disconnected walls, duplicate geometry,
-   impossible intersections, open polygons, geometry that disagrees with its
-   annotation. Done early, this pays off on *every* later change — it
-   immediately tells you whether an OCR or geometry improvement actually
-   helped.
+2. **Verification / lint** *(first pass shipped).* `verify.py` flags doubled
+   walls (duplicate geometry), dimensions that disagree with their own drawn
+   length, and long lines floating free — advisory only, never auto-fixed,
+   each with a location and severity in a `.lint.json` sidecar. The benchmark
+   tracks *actionable* findings (should stay ~0 on clean input), so it now
+   also guards against a change introducing junk geometry. Still to add:
+   open-polygon and impossible-intersection checks.
 3. **Real DWG round-trip test.** The DWG/DGN paths are written to the ODA /
    LibreDWG CLIs but unverified without a converter installed — confirm on a
    machine that has one.

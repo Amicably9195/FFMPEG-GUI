@@ -1287,6 +1287,7 @@ def convert(input_path, output_path=None, *,
             deep_clean=True,
             smart_read=True,
             review_out=False,
+            do_verify=True,
             review_conf=70,
             min_line_px=6.0,
             speck_px=8,
@@ -1328,7 +1329,8 @@ def convert(input_path, output_path=None, *,
             do_curves=do_curves, ortho_snap=ortho_snap,
             auto_scale=auto_scale, flag_review=flag_review,
             deep_clean=deep_clean, smart_read=smart_read,
-            review_out=review_out, review_conf=review_conf,
+            review_out=review_out, do_verify=do_verify,
+            review_conf=review_conf,
             min_line_px=min_line_px, speck_px=speck_px,
             ocr_min_conf=ocr_min_conf)
     if output_path is None:
@@ -1538,6 +1540,30 @@ def convert(input_path, output_path=None, *,
         except Exception as exc:
             log(f"(provenance export skipped: {exc})")
 
+    if do_verify:
+        # drawing lint: flag likely defects (never auto-fix). Check only the
+        # geometry that was actually written (write_dxf drops sub-min lines),
+        # so lint reflects the output, not intermediate fragments.
+        try:
+            import verify, json as _json
+            written = np.asarray(
+                [s for s in segs
+                 if math.hypot(s[2] - s[0], s[3] - s[1]) >= min_line_px],
+                dtype=np.float64) if len(segs) else segs
+            findings = verify.check(written, dashed=dashed, dims=dim_pairs,
+                                    scale=scale, units_feet=units_feet)
+            s = verify.summarize(findings)
+            if findings:
+                sev = s["by_severity"]
+                log(f"Lint: {s['total']} advisory finding(s) "
+                    f"({sev['high']} high, {sev['medium']} medium, "
+                    f"{sev['low']} low) - see .lint.json")
+            with open(os.path.splitext(output_path)[0] + ".lint.json",
+                      "w") as f:
+                _json.dump({"summary": s, "findings": findings}, f)
+        except Exception as exc:
+            log(f"(lint skipped: {exc})")
+
     if final_output != output_path:  # DWG/DGN requested
         import cad_io
         if cad_io.from_dxf(output_path, final_output, log=log):
@@ -1595,6 +1621,8 @@ def main():
     ap.add_argument("--review", action="store_true",
                     help="write a .review.json sidecar for the text "
                          "correction screen (python review_gui.py ...)")
+    ap.add_argument("--no-verify", action="store_true",
+                    help="skip the drawing-lint pass (.lint.json)")
     ap.add_argument("--review-conf", type=float, default=70,
                     help="OCR confidence below this is flagged (default 70)")
     ap.add_argument("--min-line", type=float, default=6.0,
@@ -1617,6 +1645,7 @@ def main():
             deep_clean=not args.no_clean,
             smart_read=not args.no_smart,
             review_out=args.review,
+            do_verify=not args.no_verify,
             review_conf=args.review_conf,
             min_line_px=args.min_line,
             speck_px=args.speck)
