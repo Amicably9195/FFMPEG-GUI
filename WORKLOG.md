@@ -8,6 +8,26 @@ numbers, state at stop.
 
 ---
 
+## 2026-07-23 — Claude Code — Lint: open-polygon + impossible-intersection
+
+**Task:** TASKS.md P2 — extend `verify.py` with two deterministic checks.
+
+**Baseline:** actionable lint 0 / info 24; coverage 96.3%, precision 99.0%,
+corners 24/24.
+
+**Did:** added `open_polygon` (two long walls whose free ends nearly meet at
+a corner but leave a gap; angle required so door gaps aren't flagged) and
+`impossible_intersection` (two long walls crossing with no shared vertex).
+Updated verify.py docstring.
+
+**After:** actionable 0 / info 24 unchanged; coverage 96.3%, precision 99.0%,
+corners 24/24 unchanged — both checks are high-precision (0 false positives
+across all 6 synthetic plans, clean and dirty).
+
+**State at stop:** committed and pushed; tree clean.
+
+---
+
 ## 2026-07-23 — Claude Code — Dataset infrastructure (TASKS.md P0, part 1)
 
 **Task:** Build `dataset_builder.py` — the curated benchmark + training

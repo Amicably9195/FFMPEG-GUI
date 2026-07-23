@@ -11,6 +11,16 @@ Format: `YYYY-MM-DD — <engineer> — <summary>` then bullets.
 
 ## Unreleased
 
+### 2026-07-23 — Claude Code — Lint: open-polygon + impossible-intersection
+- `verify.py` gains two deterministic checks (TASKS.md P2):
+  - `open_polygon` — two long walls whose free ends nearly meet at a corner
+    but leave a gap (unclosed room boundary); requires an angle, so collinear
+    door gaps are not flagged.
+  - `impossible_intersection` — two long walls that cross in their interiors
+    with no shared vertex (unhealed overlap).
+- Both tuned high-precision: benchmark actionable lint stays 0 across all 6
+  plans (info 24); coverage 96.3%, precision 99.0%, corners 24/24 unchanged.
+
 ### 2026-07-23 — Claude Code — WORKFLOW: how to run two engineers
 - Added a "Running two engineers (Claude Code + Codex)" section to
   `WORKFLOW.md`: the turn-taking rule (one engineer per branch at a time),

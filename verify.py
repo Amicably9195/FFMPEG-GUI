@@ -12,6 +12,10 @@ Checks (all deterministic):
   * duplicate       - two lines nearly collinear and overlapping (doubled wall)
   * dangling_wall   - a long line whose end meets nothing (a wall stopping in
                       space); short leaders/ticks are exempt
+  * open_polygon    - two long walls whose free ends nearly meet at a corner
+                      but leave a gap (an unclosed room boundary)
+  * impossible_intersection - two long walls that cross with no shared vertex
+                      at the crossing (an unhealed overlap)
   * dimension_mismatch - a DIMENSION whose stated value disagrees with its own
                       drawn length under the locked scale
 
@@ -97,6 +101,72 @@ def check(segments, dashed=(), dims=(), scale=None, units_feet=False,
                     "at": [round(m[0], 1), round(m[1], 1)],
                     "detail": "long line floating free (both ends "
                               "meet nothing)"})
+
+    # 5. open polygons: two long walls each ending in a FREE endpoint, whose
+    #    free ends fall close but unsnapped and form an angle - a room corner
+    #    that failed to close. Collinear near-gaps are doors/breaks, not
+    #    defects, so an angle is required (keeps precision high).
+    if len(segs):
+        gap_hi = connect_tol * 4
+        ends = np.vstack([segs[:, :2], segs[:, 2:]])
+        open_pts = []
+        for i in range(len(segs)):
+            if lengths[i] < wall_min:
+                continue
+            for e, other in ((segs[i, :2], segs[i, 2:]),
+                             (segs[i, 2:], segs[i, :2])):
+                d = np.abs(ends - e).max(axis=1)
+                if np.count_nonzero(d <= connect_tol) <= 1:      # free end
+                    dv = e - other
+                    open_pts.append((e, i, dv / (np.linalg.norm(dv) + 1e-9)))
+        for a in range(len(open_pts)):
+            pa, ia, da = open_pts[a]
+            for b in range(a + 1, len(open_pts)):
+                pb, ib, db = open_pts[b]
+                if ia == ib:
+                    continue
+                gap = math.hypot(pb[0] - pa[0], pb[1] - pa[1])
+                if connect_tol < gap <= gap_hi:
+                    ang = abs(_angle([0, 0, da[0], da[1]])
+                              - _angle([0, 0, db[0], db[1]]))
+                    ang = min(ang, 180 - ang)
+                    if ang > 20:                                 # a corner
+                        m = (pa + pb) / 2
+                        findings.append({
+                            "type": "open_polygon", "severity": "medium",
+                            "at": [round(float(m[0]), 1), round(float(m[1]), 1)],
+                            "detail": "walls nearly meet at a corner but leave "
+                                      "a gap (unclosed boundary)"})
+
+    # 6. impossible intersections: two long walls that cross in their
+    #    interiors with NO shared vertex at the crossing - an unhealed
+    #    overlap. A real crossing shares a node; this one passes through.
+    if len(segs):
+        long_idx = [i for i in range(len(segs)) if lengths[i] >= wall_min]
+        ends = np.vstack([segs[:, :2], segs[:, 2:]])
+        eps = 0.03
+        for ai in range(len(long_idx)):
+            i = long_idx[ai]
+            p, r = segs[i, :2], segs[i, 2:] - segs[i, :2]
+            for bi in range(ai + 1, len(long_idx)):
+                j = long_idx[bi]
+                q, s = segs[j, :2], segs[j, 2:] - segs[j, :2]
+                rxs = r[0] * s[1] - r[1] * s[0]
+                if abs(rxs) < 1e-6:
+                    continue
+                qp = q - p
+                t = (qp[0] * s[1] - qp[1] * s[0]) / rxs
+                u = (qp[0] * r[1] - qp[1] * r[0]) / rxs
+                if eps < t < 1 - eps and eps < u < 1 - eps:
+                    x = p + t * r
+                    d = np.abs(ends - x).max(axis=1)
+                    if np.count_nonzero(d <= connect_tol) == 0:  # no vertex
+                        findings.append({
+                            "type": "impossible_intersection",
+                            "severity": "medium",
+                            "at": [round(float(x[0]), 1), round(float(x[1]), 1)],
+                            "detail": "two walls cross with no shared vertex "
+                                      "(unhealed intersection)"})
 
     # 4. dimension vs its own geometry (only meaningful when scaled)
     if units_feet and scale:

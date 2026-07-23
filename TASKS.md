@@ -58,16 +58,6 @@ _None. (When you start a task, move it here and note it in HANDOFF.md.)_
 - **Effort:** <1 session once a converter is available.
 - **Benchmark affected:** new CAD-I/O fidelity check (not yet in benchmark).
 
-### P2 — Verification: open-polygon + impossible-intersection checks
-- **Why:** extends the trustworthy lint pass; catches more real defects.
-- **Scope:** add open-room-boundary detection and impossible-intersection
-  checks to `verify.py`; keep them high-precision (actionable ~0 on clean
-  input).
-- **Dependencies:** none (`verify.py` shipped).
-- **Effort:** <1 session.
-- **Benchmark affected:** lint actionable/info columns; must not raise
-  actionable count on clean plans.
-
 ### P2 — Text-tier fine-tune on correction-flywheel data
 - **Why:** the real accuracy jump on drafting lettering.
 - **Scope:** after a few hundred labeled correction pairs are collected,
@@ -99,6 +89,8 @@ _None. (When you start a task, move it here and note it in HANDOFF.md.)_
 
 ## Done (recent — full history in CHANGELOG.md)
 
+- Lint: `open_polygon` + `impossible_intersection` checks in `verify.py`,
+  high-precision (benchmark actionable stays 0).
 - Dataset infrastructure framework: `dataset_builder.py` — approved-source
   registry (curated, never scraped), 11 category folders, synthetic
   degradation library (12 degradations + 7 real-world recipes),

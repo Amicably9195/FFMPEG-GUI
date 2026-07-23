@@ -1,11 +1,12 @@
 # HANDOFF — Start here
 
 **The single most important thing right now:** the dataset infrastructure
-*framework* and *synthetic pipeline* are built and tested (`dataset_builder.py`).
-What remains of the P0 dataset work — wiring real curated downloaders and a
-real-drawing regression suite — is **network-gated and blocked in this
-sandbox**. The next unblocked task is **P2 in TASKS.md: open-polygon +
-impossible-intersection lint checks** in `verify.py`.
+*framework* and *synthetic pipeline* are built (`dataset_builder.py`) and the
+lint pass now has open-polygon + impossible-intersection checks. What remains
+of the P0 dataset work — wiring real curated downloaders and a real-drawing
+regression suite — is **network-gated and blocked in this sandbox**. The next
+unblocked task is **P1 in TASKS.md: text-tier synthetic pre-training**, which
+can now use `dataset_builder.synth` / the degradation library.
 
 This file is overwritten at the end of every session (and at each 20–30 min
 checkpoint) with the current state, so the next engineer — Claude Code or
@@ -40,12 +41,12 @@ STATUS → TASKS → WORKLOG → baseline benchmark), then pick the highest-prio
   needs network + per-source license confirmation. Do this on a connected
   machine. Each fetcher must land inside `dataset_builder.fetch` (the single
   sanctioned entry point), never as an ad-hoc scrape.
-- **P2 (unblocked, good next increment):** add open-polygon and
-  impossible-intersection checks to `verify.py`; keep them high-precision so
-  actionable lint stays ~0 on clean plans.
-- **P1 (partly unblocked):** text-tier synthetic pre-training can now use
-  `dataset_builder.synth` / the degradation library to generate training data
-  locally.
+- **P1 (unblocked, good next increment):** text-tier synthetic pre-training —
+  generate training data locally via `dataset_builder.synth` / the
+  degradation library, then pre-train/adapt the local reader. Target: OCR
+  accuracy (now 80%).
+- **P2 (unblocked):** text-tier fine-tune needs collected corrections + a GPU
+  (blocked here). Deeper deterministic geometry (P3) is fully unblocked.
 
 ## Using dataset_builder.py
 
