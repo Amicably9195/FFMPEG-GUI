@@ -11,6 +11,13 @@ Format: `YYYY-MM-DD — <engineer> — <summary>` then bullets.
 
 ## Unreleased
 
+### 2026-07-23 — Claude Code — WORKFLOW: how to run two engineers
+- Added a "Running two engineers (Claude Code + Codex)" section to
+  `WORKFLOW.md`: the turn-taking rule (one engineer per branch at a time),
+  the one-line boot prompt, the sequential hand-off cycle, optional parallel
+  mode (separate branches for non-overlapping tasks), and how to check
+  progress without reading code. Docs only.
+
 ### 2026-07-23 — Claude Code — Dataset infrastructure (framework + synthetic)
 - `dataset_builder.py`: the curated benchmark + training corpus, curated +
   synthetic only (DECISIONS.md #7 — never scrape the web).

@@ -7,6 +7,59 @@ using only what is written down. This document is that protocol.
 
 ---
 
+## Running two engineers (Claude Code + Codex)
+
+The two AIs never communicate directly. **They coordinate only through the
+repository.** Neither remembers anything between sessions, so every fact and
+every handoff lives in the tracked docs — not in a chat window.
+
+**The turn-taking rule (do not break this):** on a given branch, **only one
+engineer works at a time.** The other stays idle until the first has
+committed and pushed. Two engineers editing the same files at once produces
+merge conflicts and lost work — and neither AI can safely merge the other's
+half-finished thoughts.
+
+### The boot prompt
+
+You do not re-explain the project. Give whichever engineer is up this single
+line and let the repo do the rest:
+
+> **Follow WORKFLOW.md. Read AI_RULES.md and HANDOFF.md first, then pick up
+> the next task.**
+
+That triggers the standard session below. Because both engineers obey the
+same AI_RULES.md and this WORKFLOW.md, the work comes out interchangeable.
+
+### The hand-off cycle (sequential — the default)
+
+One branch, engineers take turns. Zero merge conflicts.
+
+1. Engineer A boots, does one task, updates docs, commits, pushes, **stops.**
+2. You point Engineer B at the repo with the boot prompt.
+3. B pulls, reads HANDOFF.md, sees exactly where A stopped, does the next
+   task, commits, pushes, stops.
+4. Repeat. Either engineer can be A or B on any given turn.
+
+If A's session is interrupted mid-task (context runs out), B resumes from
+A's last HANDOFF.md checkpoint — that is what the 20–30 min checkpointing
+rule guarantees.
+
+### Parallel mode (optional — faster, more overhead)
+
+Only when two tasks touch **different files** (e.g. one does `verify.py`
+lint, the other does the text tier): give each engineer its **own branch**
+and an independent task from TASKS.md, then you merge both into the main
+branch yourself. If the tasks might touch the same code, use sequential mode
+instead — it is slower but never conflicts.
+
+### How you check progress without reading code
+
+- `HANDOFF.md` — what just happened, what is next.
+- `CHANGELOG.md` — the running list of shipped changes.
+- `python benchmark.py` — proof the last change regressed nothing.
+
+---
+
 ## The standard session
 
 Follow these steps in order. Every session, every engineer.
