@@ -2,3 +2,16 @@ __pycache__/
 *.pyc
 build/
 dist/
+
+# Generated conversion sidecars (written next to each output DXF)
+*.lint.json
+*.provenance.json
+*.review.json
+*.review.png
+
+# Local training corpus / benchmark data (large, often not redistributable)
+.drawing2cad_dataset/
+
+# Benchmark scratch output (only appears with --keep)
+bench_*.png
+bench_*.dxf

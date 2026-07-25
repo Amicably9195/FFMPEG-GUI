@@ -50,24 +50,32 @@ framework are committed and pushed; the tree is clean.
   the 3/6 circle recovery.
 - Recovered wall-connected circles (3/6 → 5/6, coverage → 96.7%, recorded
   0.1% precision trade in DECISIONS.md #10).
-- Added a hard-case stress tier: `benchmark.py --hard appearance_hard`
-  (appearance-only degradation, same ground truth). Default run unchanged.
+- Added a hard-case stress tier: `benchmark.py --hard appearance_hard`.
+- Faded-scan OCR contrast recovery (`_enhance_faded_ocr`): stress OCR 40→50%,
+  clean guardrail byte-identical.
+- Tests → 62 (added correction-flywheel end-to-end, ring gate, faded gate);
+  requirements.txt; .gitignore covers generated sidecars + dataset.
 
 ## Do this next
 
-Run the standard session in `WORKFLOW.md`, then pick the highest-priority
-*unblocked* task:
+Run the standard session in `WORKFLOW.md`. **Most of the safe, deterministic
+fruit is now picked** — the honest state of the remaining gaps:
 
-- **P2 (unblocked) — more lint checks or deeper deterministic geometry.**
-  The circles pass is done (5/6). Remaining single circle miss is plan 0,
-  whose ring is too merged for Hough to seed; not worth chasing (risk > 1/6).
-  Options: (a) dashed-linetype recovery on dirty scans (4/6 → improve, same
-  care as circles — never invent dashes); (b) a Phase-B deterministic feature
-  (title-block extraction, line-weight estimation); (c) more `verify.py`
-  checks. Whatever you pick: benchmark before/after, keep actionable lint 0.
-  - *Note:* bare-feet recovery (`23'`→`23`) was considered and deprioritized —
-    the plan benchmark's dimensions are always `N'-M"`, so it can't be
-    measured there, and blind recovery risks corrupting callout numbers.
+- **Text under heavy degradation (stress OCR 50%, scale 0/6, dims 2/12)** is
+  the biggest remaining lever, but the deep jump needs the **GPU fine-tune**
+  (P2, blocked here): `synth_text.py gen -n <large>` → train → re-measure with
+  `benchmark.py --hard appearance_hard`. Safe CPU-side wins here are largely
+  exhausted (CLAHE hurt; bilateral already shipped).
+- **Deliberately-declined as unsafe/not-worth-it (do NOT redo without a new
+  idea):** dashed 4/6 — plan 1 is detected but ends 14px short (2px past the
+  benchmark tolerance; extending it = inventing a dash), plan 3's rhythm is
+  destroyed. scale 5/6 — plan 4's honest *decline* is correct; forcing a lock
+  risks a wrong scale on a survey. circle 6th (plan 0) — ring too merged for
+  Hough to seed. bare-feet (`23'`→`23`) — unmeasurable on this benchmark.
+- **Still genuinely open + safe:** a Phase-B deterministic feature with its own
+  new benchmark metric (title-block extraction, line-weight estimation,
+  automatic layer inference); more high-precision `verify.py` checks; wiring
+  the curated dataset fetchers (P0, needs network).
 - **P0 (blocked here):** wire curated fetchers + real regression suite —
   needs network + per-source license confirmation. Each fetcher must land in
   `dataset_builder.fetch`, never as an ad-hoc scrape.
