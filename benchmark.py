@@ -303,24 +303,9 @@ def score(dxf_path, truth_px, labels, img_h, true_scale, used_scale=1.0,
             joints_ok, joints_tot, dims_ok, len(truth_dims))
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--n", type=int, default=6)
-    ap.add_argument("--seed", type=int, default=1)
-    ap.add_argument("--keep", action="store_true",
-                    help="keep generated files next to benchmark.py")
-    ap.add_argument("--hard", metavar="RECIPE", default=None,
-                    help="stress tier: degrade every plan with a dataset_builder "
-                         "appearance-only recipe (e.g. appearance_hard, faxed, "
-                         "old_photocopy) before converting. Geometry is not "
-                         "moved, so the same ground truth scores it. Does NOT "
-                         "change the default guardrail run.")
-    args = ap.parse_args()
-    if args.hard:
-        import dataset_builder
-        if args.hard not in dataset_builder.APPEARANCE_ONLY:
-            ap.error(f"--hard recipe must be appearance-only "
-                     f"(no geometry move): {dataset_builder.APPEARANCE_ONLY}")
+def _run(args, hard_recipe):
+    """Run the whole suite once (optionally degraded by hard_recipe), print the
+    per-plan lines and the health panel, and return the aggregate metrics."""
     rng = np.random.default_rng(args.seed)
     pyrng = random.Random(args.seed)
 
@@ -333,9 +318,9 @@ def main():
         segs, labels, dims, circles, dashes = generate_plan(pyrng)
         img, truth_px, truth_circ, truth_dash = render(
             segs, labels, rng, dirty=dirty, circles=circles, dashes=dashes)
-        if args.hard:
+        if hard_recipe:
             import dataset_builder
-            img, _ = dataset_builder.degrade(img, rng, recipe=args.hard)
+            img, _ = dataset_builder.degrade(img, rng, recipe=hard_recipe)
         img_path = os.path.join(outdir, f"bench_{i}.png")
         cv2.imwrite(img_path, img)
         dxf_path = os.path.join(outdir, f"bench_{i}.dxf")
@@ -389,7 +374,7 @@ def main():
 
     def frac(a, b):
         return f"{a}/{b} ({(100.0 * a / b) if b else 0:.0f}%)"
-    tier = f"  [STRESS TIER: {args.hard}]" if args.hard else ""
+    tier = f"  [STRESS TIER: {hard_recipe}]" if hard_recipe else ""
     print("\n" + "=" * 44 +
           f"\n  PROJECT HEALTH PANEL  (benchmark v{BENCHMARK_VERSION})"
           f"{tier}\n" + "=" * 44)
@@ -428,6 +413,54 @@ def main():
         print(f"  Flagged for review {review_total}  "
               f"(objects the reviewer should check first)")
     print("=" * 44)
+    return {"recipe": hard_recipe or "clean", "cov": cov, "prec": prec,
+            "txt": txt, "dm": dm, "circ": circ, "dsh": dsh, "jnt": jnt,
+            "scl": (scl, len(rows)), "lint_act": lint_act}
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--n", type=int, default=6)
+    ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--keep", action="store_true",
+                    help="keep generated files next to benchmark.py")
+    ap.add_argument("--hard", metavar="RECIPE", default=None,
+                    help="stress tier: degrade every plan with a dataset_builder "
+                         "appearance-only recipe (e.g. appearance_hard, faxed, "
+                         "old_photocopy) before converting, or 'all' to sweep "
+                         "every recipe and print a robustness table. Geometry "
+                         "is not moved, so the same ground truth scores it. "
+                         "Does NOT change the default guardrail run.")
+    args = ap.parse_args()
+    if args.hard and args.hard != "all":
+        import dataset_builder
+        if args.hard not in dataset_builder.APPEARANCE_ONLY:
+            ap.error(f"--hard recipe must be appearance-only "
+                     f"(no geometry move) or 'all': "
+                     f"{dataset_builder.APPEARANCE_ONLY}")
+
+    if args.hard == "all":
+        import dataset_builder
+        recipes = [r for r in dataset_builder.APPEARANCE_ONLY
+                   if r != "clean_flatbed"]
+        results = [_run(args, None)] + [_run(args, r) for r in recipes]
+        print("\n" + "=" * 72)
+        print("  ROBUSTNESS TABLE  (how each metric holds up as scans degrade)")
+        print("=" * 72)
+        print(f"  {'recipe':16s} {'cover':>6s} {'prec':>6s} {'OCR':>6s} "
+              f"{'dim':>6s} {'circ':>5s} {'dash':>5s} {'corner':>7s} "
+              f"{'scale':>6s} {'act':>4s}")
+        for r in results:
+            dm, circ, dsh, jnt, scl = (r["dm"], r["circ"], r["dsh"],
+                                       r["jnt"], r["scl"])
+            print(f"  {r['recipe']:16s} {r['cov']*100:5.1f}% {r['prec']*100:5.1f}% "
+                  f"{r['txt']*100:5.1f}% {dm[0]}/{dm[1]:<4d} "
+                  f"{circ[0]}/{circ[1]:<3d} {dsh[0]}/{dsh[1]:<3d} "
+                  f"{jnt[0]}/{jnt[1]:<5d} {scl[0]}/{scl[1]:<4d} "
+                  f"{r['lint_act']:>4d}")
+        print("=" * 72)
+    else:
+        _run(args, args.hard)
 
 
 if __name__ == "__main__":

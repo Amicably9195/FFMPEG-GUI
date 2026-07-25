@@ -11,6 +11,17 @@ Format: `YYYY-MM-DD — <engineer> — <summary>` then bullets.
 
 ## Unreleased
 
+### 2026-07-23 — Claude Code — `benchmark.py --hard all` robustness table
+- `--hard all` sweeps every appearance-only recipe (clean, old_photocopy,
+  faxed, appearance_hard) and prints a one-look robustness table showing how
+  each metric holds as scans degrade. `main()` refactored into a reusable
+  `_run()`; the default and single-recipe paths are behavior-identical
+  (guardrail byte-for-byte unchanged).
+- First full reading: geometry is robust across all conditions (circles
+  5–6/6, corners 24/24 except appearance_hard 23/24), while OCR/scale/dashed
+  fall off sharply; `old_photocopy` also drives actionable lint to 6 (the lint
+  honestly flagging that degraded output needs review) and precision to 85%.
+
 ### 2026-07-23 — Claude Code — Dashed linework on its own HIDDEN layer
 - `scan2cad.write_dxf`: dashed lines now go on a dedicated `HIDDEN` layer
   (color 1) instead of being mixed into `LINES` — drafting convention, so a

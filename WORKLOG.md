@@ -8,6 +8,32 @@ numbers, state at stop.
 
 ---
 
+## 2026-07-23 — Claude Code — Robustness table + HIDDEN layer
+
+**Two small safe increments (deterministic fruit mostly picked):**
+
+1. Dashed linework → its own `HIDDEN` layer (drafting convention; scoring
+   reads dashed by linetype not layer, so benchmark byte-identical). +2 tests.
+
+2. `benchmark.py --hard all`: refactored `main()` into a reusable `_run()`
+   and added an all-recipe sweep printing a robustness table. Default and
+   single-recipe paths verified behavior-identical.
+
+**First full robustness reading:**
+```
+recipe           cover  prec   OCR    dim   circ dash corner scale act
+clean            96.7% 98.9% 83.3% 10/12  5/6  4/6  24/24  5/6   0
+old_photocopy    97.1% 85.0% 80.0%  7/12  5/6  3/6  24/24  4/6   6
+faxed            95.3% 96.8% 40.0%  3/12  6/6  1/6  24/24  0/6   1
+appearance_hard  93.1% 96.9% 50.0%  2/12  5/6  0/6  23/24  0/6   0
+```
+Geometry robust everywhere (circles 5-6/6); text/scale/dashed fall off;
+old_photocopy raises actionable lint to 6 (honest flagging of degraded output).
+
+**State at stop:** both committed and pushed; tree clean; 64 tests green.
+
+---
+
 ## 2026-07-23 — Claude Code — Faded-scan OCR contrast recovery
 
 **Task:** attack the stress tier's weakest point (OCR 40%) safely.
