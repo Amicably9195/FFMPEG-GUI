@@ -8,6 +8,25 @@ numbers, state at stop.
 
 ---
 
+## 2026-07-23 — Claude Code — Confidence readout in health panel
+
+**Task:** make per-object confidence visible in the guardrail ("confidence
+everywhere" / trust is the point).
+
+**Did:** `benchmark.py` reads the `.provenance.json` sidecar and prints two
+display-only panel lines — Confidence (avg) per type, Flagged for review
+total. Benchmark now passes `review_out=True` so sidecars exist (no
+production change). Fixed the aggregation to skip meta keys (`_total`,
+`_review_items`).
+
+**Result:** additive; every score unchanged (96.3/99.0, OCR 83.3, circ 3/6,
+corners 24/24, lint 0/24). New readout: circle 0.22 (honestly low),
+dimension 0.95, text 0.92, polyline 0.50; 13 flagged for review. tests green.
+
+**State at stop:** committed and pushed; tree clean.
+
+---
+
 ## 2026-07-23 — Claude Code — Extend test coverage
 
 **Task:** harden the safety net the two-engineer workflow depends on. First

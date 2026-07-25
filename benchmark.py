@@ -314,6 +314,7 @@ def main():
     pyrng = random.Random(args.seed)
 
     rows = []
+    prov_summaries = []          # per-plan provenance summaries (confidence)
     outdir = (os.path.dirname(os.path.abspath(__file__))
               if args.keep else tempfile.mkdtemp())
     for i in range(args.n):
@@ -326,7 +327,8 @@ def main():
         dxf_path = os.path.join(outdir, f"bench_{i}.dxf")
         t0 = time.perf_counter()
         stats = scan2cad.convert(img_path, dxf_path, do_page_crop=False,
-                                 do_deskew=False, log=lambda m: None)
+                                 do_deskew=False, review_out=True,
+                                 log=lambda m: None)
         elapsed = time.perf_counter() - t0
         (cov, prec, hits, total, feet, serr, cok, ctot, dok, dtot,
          jok, jtot, mok, mtot) = score(
@@ -343,6 +345,10 @@ def main():
         rows.append((i, dirty, cov, prec, hits, total, feet, cok, ctot,
                      dok, dtot, jok, jtot, mok, mtot, serr, elapsed,
                      lint_act, lint_info))
+        prov_path = os.path.splitext(dxf_path)[0] + ".provenance.json"
+        if os.path.exists(prov_path):
+            import json as _json
+            prov_summaries.append(_json.load(open(prov_path))["summary"])
         stag = (f"YES {serr * 100:.1f}%" if feet else "no")
         print(f"plan {i} ({'dirty' if dirty else 'clean'}): "
               f"cover {cov * 100:5.1f}%  prec {prec * 100:5.1f}%  "
@@ -387,6 +393,25 @@ def main():
           f"(high+medium: duplicates/mismatches - should stay ~0)")
     print(f"  Lint (info)        {lint_info}  "
           f"(low: floating fragments)")
+    # confidence readout (display only - "confidence everywhere" made visible
+    # in the guardrail; does not affect any score above)
+    if prov_summaries:
+        agg_conf, review_total = {}, 0
+        for s in prov_summaries:
+            for t, v in s.items():
+                if t == "_review_items":
+                    review_total += v
+                    continue
+                if t.startswith("_"):        # _total and other meta keys
+                    continue
+                w, c = agg_conf.get(t, (0.0, 0))
+                agg_conf[t] = (w + v["avg_confidence"] * v["count"],
+                               c + v["count"])
+        parts = ", ".join(f"{t} {w / c:.2f}"
+                          for t, (w, c) in sorted(agg_conf.items()) if c)
+        print(f"  Confidence (avg)   {parts}")
+        print(f"  Flagged for review {review_total}  "
+              f"(objects the reviewer should check first)")
     print("=" * 44)
 
 

@@ -44,6 +44,9 @@ framework are committed and pushed; the tree is clean.
   the component-merge currently drops), and prove precision stays 99%.
 - Added top-level `README.md` — the landing page for users and engineers
   (doctrine, onboarding order, module map, coordination-doc table).
+- Benchmark health panel now shows per-type average confidence + review count
+  (from the provenance sidecar). Honest: circle avg confidence 0.22 mirrors
+  the 3/6 circle recovery.
 
 ## Do this next
 

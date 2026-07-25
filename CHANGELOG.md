@@ -11,6 +11,18 @@ Format: `YYYY-MM-DD — <engineer> — <summary>` then bullets.
 
 ## Unreleased
 
+### 2026-07-23 — Claude Code — Confidence readout in the benchmark health panel
+- `benchmark.py` reads the `.provenance.json` sidecar and adds two
+  display-only lines to the health panel: **Confidence (avg)** per object type
+  and **Flagged for review** total — making "confidence everywhere" visible in
+  the guardrail. Honest by construction: circles average **0.22** (the tool
+  is genuinely unsure of them, matching 3/6 recovery) while dimensions 0.95
+  and text 0.92 are high.
+- Additive only — no score changes. All metrics held: coverage 96.3%,
+  precision 99.0%, OCR 83.3%, dims 10/12, circ 3/6, dash 4/6, corners 24/24,
+  scale 5/6, actionable lint 0. Benchmark now runs convert with
+  `review_out=True` so the sidecars exist to read (no production change).
+
 ### 2026-07-23 — Claude Code — Extend tests to more faithfulness invariants
 - `tests.py` grows from 37 to 51 checks, now covering: `verify.summarize`
   tallies; `provenance.build_records` **never loses information** (an
