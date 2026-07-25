@@ -1,11 +1,11 @@
 # HANDOFF — Start here
 
-**The single most important thing right now:** dimension tick reconstruction
-just landed (`smart_ocr.normalize_dimension`) — synthetic drafting text is up
-to **96.7% exact** and the plan-benchmark OCR rose **80.0% → 83.3%** with no
-regression. The next unblocked task is **P1 in TASKS.md: recover bare-feet
-marks using drawing context** (`23'` → `23`) inside `scan2cad`, where the
-pipeline already knows which labels are dimensions.
+**The single most important thing right now:** a long, clean session shipped
+10 committed increments (coordination layer, dataset_builder, synth_text +
+reader tooling, dimension tick reconstruction → plan OCR **80.0% → 83.3%**,
+two new lint checks, a 51-check test suite + CI gate, README, confidence
+readout). Tree is clean, all pushed, tests green. The best next task is a
+**focused session on circles/arcs (3/6)** — see "Do this next".
 
 This file is overwritten at the end of every session (and at each 20–30 min
 checkpoint) with the current state, so the next engineer — Claude Code or
@@ -53,11 +53,21 @@ framework are committed and pushed; the tree is clean.
 Run the standard session in `WORKFLOW.md`, then pick the highest-priority
 *unblocked* task:
 
-- **P1 (unblocked, best next increment):** recover bare-feet marks
-  (`23'` → `23`) inside `scan2cad`, using the dimension-geometry pairing that
-  already exists to know which labels are dimensions (so callout numbers
-  stay untouched). Verify plan-benchmark dimension accuracy rises without
-  OCR/text regressing.
+- **P1 (unblocked, best next increment) — circles/arcs 3/6, safely.** The
+  failure: `detect_circles` (scan2cad ~L702) only accepts a circle that is
+  its own isolated connected component; a column whose ring TOUCHES a wall
+  merges into one component and is dropped (even on clean plan 0). Recovering
+  it invents nothing — the full ring is present in the ink. Approach: for
+  components rejected as lone circles, search for a ring within them
+  (e.g. `cv2.HoughCircles` constrained to `[min_r, max_r]`), then accept ONLY
+  if it passes the SAME ring test detect_circles already uses (p95 residual +
+  ≥33/36 sectors filled). That gate is your precision protection. **Prove
+  precision stays ≥99% and coverage/corners hold** before keeping it; if a
+  wall corner sneaks a false circle, tighten or revert. Do NOT force full
+  circles from broken rings — that is invention (AI_RULES #1).
+  - *Note:* bare-feet recovery (`23'`→`23`) was considered and deprioritized —
+    the plan benchmark's dimensions are always `N'-M"`, so it can't be
+    measured there, and blind recovery risks corrupting callout numbers.
 - **P0 (blocked here):** wire curated fetchers + real regression suite —
   needs network + per-source license confirmation. Each fetcher must land in
   `dataset_builder.fetch`, never as an ad-hoc scrape.
