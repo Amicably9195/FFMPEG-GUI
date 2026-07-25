@@ -11,6 +11,19 @@ Format: `YYYY-MM-DD — <engineer> — <summary>` then bullets.
 
 ## Unreleased
 
+### 2026-07-23 — Claude Code — Test suite guarding the faithfulness invariants
+- `tests.py`: a dependency-free regression suite (no pytest — `python
+  tests.py`), 37 checks locking in the invariants the project rests on:
+  `normalize_dimension` never edits non-dimension text; `verify.check` never
+  mutates the geometry it inspects and stays high-precision (clean square →
+  0 actionable); it still detects duplicate/open_polygon/impossible_
+  intersection/dimension_mismatch; `parse_dimension` accepts/declines
+  correctly; dataset split is deterministic and dedup-safe; degrade records
+  its transforms; `_jsonable` makes numpy json-safe.
+- CI: `.github/workflows/build-drawing2cad.yml` gains a `test` job that runs
+  `tests.py`; the Windows build now `needs: test`, so a red test blocks the
+  exe. WORKFLOW.md step 6 runs tests before the benchmark.
+
 ### 2026-07-23 — Claude Code — Text tier: dimension tick reconstruction
 - `smart_ocr.normalize_dimension`: reconstructs canonical `A'-B"` from a
   dimension whose feet/inch tick marks the reader dropped (`7-0`, `11-10"`,

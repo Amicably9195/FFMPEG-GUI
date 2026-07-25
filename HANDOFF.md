@@ -33,6 +33,9 @@ framework are committed and pushed; the tree is clean.
 - Added `smart_ocr.normalize_dimension` (dimension tick reconstruction):
   synthetic drafting text 88.3% → 96.7% exact; plan OCR 80.0% → 83.3%. No
   regression. Non-dimension text is provably untouched.
+- Added `tests.py` (37 checks, no pytest) guarding the faithfulness
+  invariants, wired into CI (build `needs: test`) and WORKFLOW step 6.
+  Run `python tests.py` before every push.
 
 ## Do this next
 

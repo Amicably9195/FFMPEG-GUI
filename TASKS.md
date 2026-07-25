@@ -103,6 +103,8 @@ _None. (When you start a task, move it here and note it in HANDOFF.md.)_
 
 ## Done (recent — full history in CHANGELOG.md)
 
+- Test suite `tests.py` (37 checks, no pytest) guarding the faithfulness
+  invariants; CI `test` job gates the Windows build.
 - Text tier: dimension tick reconstruction (`smart_ocr.normalize_dimension`)
   — synthetic drafting text 88.3% → 96.7% exact; plan OCR 80.0% → 83.3%.
 - Text tier: `synth_text.py` — synthetic drafting-text corpus (flywheel

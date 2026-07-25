@@ -35,7 +35,8 @@ fact is not in the repo, it does not exist.
 4. **Benchmark every change.** Run `python benchmark.py` before you start
    (to know the baseline) and after (to prove the effect). Record both
    numbers. A change with no measured effect on the benchmark needs a reason
-   for existing, written down.
+   for existing, written down. Also run `python tests.py` (the faithfulness
+   invariants) — it must stay green, and CI blocks the build if it isn't.
 
 5. **Update documentation in the same commit as the code.** STATUS.md,
    CHANGELOG.md, WORKLOG.md, TASKS.md, and — if you made an architectural

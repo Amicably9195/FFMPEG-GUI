@@ -6,7 +6,25 @@ on:
     branches: [claude/drawing-scan-to-cad-v1l3ff]
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install core dependencies
+        run: |
+          pip install numpy ezdxf pytesseract pillow
+          pip install --no-deps opencv-contrib-python-headless
+
+      - name: Run tests
+        run: python tests.py
+
   build:
+    needs: test
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

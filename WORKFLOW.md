@@ -97,11 +97,16 @@ AI_RULES.md while you work.
 
 ### 6. Prove it
 ```
-python benchmark.py
+python tests.py        # correctness invariants must stay green
+python benchmark.py    # quality must not regress
 ```
-Compare to the baseline from step 3. The change must improve its target
+`tests.py` (dependency-free, no pytest) guards the faithfulness invariants —
+the reader never edits non-dimension text, lint never mutates geometry,
+dataset dedup never leaks across splits. It must pass. Then compare the
+benchmark to the baseline from step 3: the change must improve its target
 metric and regress nothing else (or carry an owner-approved trade in
-DECISIONS.md).
+DECISIONS.md). CI runs `tests.py` before every build, so a red test blocks
+the Windows exe.
 
 ### 7. Record and commit — in one commit
 Update, in the same commit as the code:

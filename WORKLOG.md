@@ -8,6 +8,26 @@ numbers, state at stop.
 
 ---
 
+## 2026-07-23 — Claude Code — Test suite + CI gate
+
+**Task:** protect every shipped increment for interchangeable engineers — a
+dependency-free correctness suite the benchmark can't isolate.
+
+**Did:** wrote `tests.py` (37 checks, no pytest): faithfulness invariants
+(reader never edits non-dimension text; `verify.check` never mutates input,
+0 actionable on a clean square, still catches every defect type;
+`parse_dimension` accept/decline; dataset split determinism + dedup; degrade
+transform recording; `_jsonable`). Added a `test` job to the CI workflow and
+made the Windows `build` job `needs: test`. WORKFLOW.md step 6 now runs
+`python tests.py` before the benchmark.
+
+**Result:** `python tests.py` → PASSED all 37 checks. Benchmark untouched
+(no engine change): 96.3% / 99.0% / 24-24, OCR 83.3%.
+
+**State at stop:** committed and pushed; tree clean.
+
+---
+
 ## 2026-07-23 — Claude Code — Text tier: dimension tick reconstruction
 
 **Task:** TASKS.md P1 — fix the dropped feet/inch tick marks the baseline
