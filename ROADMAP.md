@@ -31,20 +31,26 @@ with the owner, with other AI assistants, with anyone.
 
 ## 1. Where the program stands today
 
+*Updated as capabilities land; run `python benchmark.py` for live numbers.*
+
 | Capability | Status | Measured quality |
 |---|---|---|
 | Vector PDF input (CAD e-filings) | ✅ built | Exact — lines and text lifted, no guessing |
 | Scanned PDF input | ✅ built | Native-resolution extraction, photo pipeline |
-| Photo/scan input (JPG/PNG/TIFF) | ✅ built | 96.8% line coverage, 97.6% precision (benchmark) |
-| Text reading | ✅ built (Tesseract + RapidOCR, both local/free) | ~70% on benchmark; strong on machine text, weak on hand lettering |
-| Auto-scale to real feet | ✅ built | Locks on 4/6 benchmark plans at ≤0.5% error; declines honestly when ambiguous |
-| Layered DXF output | ✅ built | LINES / CURVES / TEXT / hidden TEXT_REVIEW |
-| Scored benchmark harness | ✅ built | Every change is graded; quality can't silently regress |
-| DWG output | ❌ | DXF only (opens in AutoCAD/MicroStation natively) |
-| CAD project files as *input* (DWG/DGN) | ❌ | Not yet accepted |
-| Arcs/circles as true entities | ❌ | Curves come out as polylines, not arc entities |
-| Dashed/dotted linetypes | ❌ | Dashes merge or stay as separate short lines |
-| Semantic understanding (wall vs dimension vs symbol) | ❌ | Everything is "a line" |
+| Photo/scan input (JPG/PNG/TIFF) | ✅ built | 96.7% line coverage, 98.9% precision (benchmark) |
+| Text reading | ✅ built (Tesseract + RapidOCR, both local/free) | 83% on benchmark; dimension tick reconstruction; strong on machine text, weak on hand lettering (fine-tune pending, see FINETUNE.md) |
+| Auto-scale to real feet | ✅ built | Locks on 5/6 benchmark plans at ≤0.5% error; declines honestly when ambiguous |
+| Layered DXF output | ✅ built | LINES / CURVES / TEXT / hidden TEXT_REVIEW / DIMENSIONS / HIDDEN |
+| Scored benchmark harness | ✅ built | Every change graded; versioned; plus a `--hard` robustness stress tier |
+| DWG / DGN output | ✅ built | Via the free ODA / LibreDWG converter (detected); clean DXF fall-back |
+| CAD project files as *input* (DWG/DGN/DXF) | ✅ built | Translated via the same detected converter |
+| Arcs/circles as true entities | ✅ built | Least-squares ARC/CIRCLE fits (5/6 benchmark, incl. wall-connected columns) |
+| Dashed/dotted linetypes | ✅ built | Dash-rhythm recognition → single DASHED line on a HIDDEN layer (4/6 benchmark) |
+| Editable DIMENSION entities | ✅ built | Label-on-line pairs become aligned DIMENSION entities |
+| Line-weight preservation | ✅ built | Measured stroke width → thin/normal/thick DXF lineweights |
+| Verification / drawing lint | ✅ built | Advisory, never auto-fixing; high-precision (0 actionable on clean) |
+| Confidence + provenance | ✅ built | Every object carries 0–1 confidence + origin record |
+| Semantic understanding (wall vs dimension vs symbol) | ◑ partial | Dimensions & dashed classified; deeper semantics deferred (deterministic-first) |
 
 ---
 
