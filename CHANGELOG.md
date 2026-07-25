@@ -11,6 +11,22 @@ Format: `YYYY-MM-DD — <engineer> — <summary>` then bullets.
 
 ## Unreleased
 
+### 2026-07-23 — Claude Code — Text tier: dimension tick reconstruction
+- `smart_ocr.normalize_dimension`: reconstructs canonical `A'-B"` from a
+  dimension whose feet/inch tick marks the reader dropped (`7-0`, `11-10"`,
+  `45-9` → `7'-0"`, `11'-10"`, `45'-9"`). Regex-gated to a two-integer
+  hyphen pattern, so it can NEVER touch a room name, note, or bare callout
+  number — faithful re-punctuation, not invention. Wired into
+  `smart_ocr.refine_words` (the live pipeline) and `synth_text` measurement.
+- **Measured gains, no regression:**
+  - Synthetic drafting text (RapidOCR): 88.3% → **96.7% exact**,
+    97.2% → 98.9% char. Tesseract: 73.3% → 78.3% exact.
+  - Plan benchmark OCR/text: **80.0% → 83.3%.** Everything else held:
+    coverage 96.3%, precision 99.0%, dimensions 10/12, corners 24/24, scale
+    5/6, actionable lint 0.
+  - Remaining misses are bare-feet values (`23'` → `23`) that need drawing
+    context to recover safely — deliberately left, not invented.
+
 ### 2026-07-23 — Claude Code — Text tier: synthetic corpus + reader baseline
 - `synth_text.py` (Phase C, Stage 1 — TASKS.md P1): unlimited synthetic
   drafting text (dimensions, room names, notes, callouts) in drafting-style

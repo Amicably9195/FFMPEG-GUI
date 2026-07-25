@@ -39,18 +39,19 @@ _None. (When you start a task, move it here and note it in HANDOFF.md.)_
   (today: synthetic plans only).
 - **Rule:** curated + synthetic only. **Never scrape the open web.**
 
-### P1 — Text tier: fix dropped feet/inch tick marks (unblocked)
-- **Why:** the measured reader baseline (`synth_text.py measure`) shows the
-  dominant drafting-text miss is dropped `'` and `"` on dimensions
-  (`7'-0"` → `7-0`). RapidOCR is 88.3% exact / 97.2% char on synthetic
-  drafting text; closing the tick-mark gap is the cheapest large win.
-- **Scope:** targeted post-processing in `smart_ocr` — when a read looks like
-  a dimension (digits + `-`), reconstruct the feet/inch marks from geometry
-  or a dimension grammar; measure with `synth_text.py measure`.
-- **Dependencies:** none (`synth_text.py` shipped; no GPU needed).
+### P1 — Text tier: recover bare-feet marks from drawing context (unblocked)
+- **Why:** after tick reconstruction, the only remaining dimension miss is
+  bare feet (`23'` → `23`) — a foot mark that can't be added context-free
+  without corrupting callout numbers. But the pipeline KNOWS which labels are
+  dimensions (they pair with dimension geometry), so it can safely restore
+  the mark there.
+- **Scope:** in `scan2cad`, for words matched to dimension lines, apply a
+  dimension-context normalizer (bare integer → `N'`); keep it off
+  non-dimension text. Verify plan-benchmark dimension accuracy rises without
+  OCR/text regressing.
+- **Dependencies:** none (dimension pairing already exists).
 - **Effort:** <1 session.
-- **Benchmark affected:** OCR / text accuracy (plan benchmark 80%; synthetic
-  drafting-text exact 88.3%).
+- **Benchmark affected:** dimension accuracy (10/12) and OCR/text (83.3%).
 
 ### P2 — Text tier: run the synthetic pre-training fine-tune
 - **Why:** the corpus generator exists; scaling it + a one-time fine-tune is
@@ -102,6 +103,8 @@ _None. (When you start a task, move it here and note it in HANDOFF.md.)_
 
 ## Done (recent — full history in CHANGELOG.md)
 
+- Text tier: dimension tick reconstruction (`smart_ocr.normalize_dimension`)
+  — synthetic drafting text 88.3% → 96.7% exact; plan OCR 80.0% → 83.3%.
 - Text tier: `synth_text.py` — synthetic drafting-text corpus (flywheel
   format) + measured reader baseline (RapidOCR 88.3% exact / 97.2% char).
 - Lint: `open_polygon` + `impossible_intersection` checks in `verify.py`,

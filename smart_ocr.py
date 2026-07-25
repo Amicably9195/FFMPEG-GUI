@@ -9,8 +9,28 @@ clearly more confident than Tesseract's, so it can rescue labels but never
 degrade good ones.
 """
 
+import re
+
 import cv2
 import numpy as np
+
+# A feet-inches dimension whose tick marks the reader dropped or half-dropped:
+# "7-0", "11-10\"", "7'-8", "45-9" ... The marks are optional in this pattern,
+# and it requires TWO integer groups joined by a hyphen - so it can never match
+# a room name ("BATH"), a bare callout number ("971"), or a note. That gate is
+# what keeps the reconstruction faithful: we only re-punctuate something that
+# is already, unambiguously, a two-part dimension.
+_DIM_RE = re.compile(r"^(\d+)\s*['’´`]?\s*-\s*(\d+)\s*[\"”]?$")
+
+
+def normalize_dimension(text):
+    """Reconstruct canonical A'-B\" from a dimension whose feet/inch marks the
+    reader dropped. Non-dimension text passes through untouched (no invention:
+    bare numbers never gain a foot mark here - that needs drawing context)."""
+    m = _DIM_RE.match("".join(text.split()))
+    if m:
+        return f"{m.group(1)}'-{m.group(2)}\""
+    return text
 
 try:
     from rapidocr_onnxruntime import RapidOCR
@@ -87,7 +107,7 @@ def refine_words(gray, words, log=print):
         if not res:
             continue
         text, score = res[0][0], float(res[0][1])
-        text = _normalize(text)
+        text = normalize_dimension(_normalize(text))
         if not text or score < MIN_SCORE:
             continue
         if score * 100.0 >= wd["conf"] + WIN_MARGIN:

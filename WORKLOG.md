@@ -8,6 +8,31 @@ numbers, state at stop.
 
 ---
 
+## 2026-07-23 — Claude Code — Text tier: dimension tick reconstruction
+
+**Task:** TASKS.md P1 — fix the dropped feet/inch tick marks the baseline
+exposed.
+
+**Baseline:** RapidOCR 88.3% exact / 97.2% char on synthetic drafting text;
+plan-benchmark OCR 80.0%.
+
+**Did:** added `smart_ocr.normalize_dimension` — regex-gated (`^\d+'?-\d+"?$`)
+reconstruction of `A'-B"`; passes non-dimensions through untouched (no
+invention). Wired into `refine_words` (live pipeline) and both `synth_text`
+readers. Sanity-checked it leaves BATH/NORTH/971/23 unchanged.
+
+**After (measured, same seed/n):** RapidOCR 88.3% → **96.7% exact**,
+97.2% → 98.9% char; Tesseract 73.3% → 78.3%. Full plan benchmark: OCR
+80.0% → **83.3%**, all else held (coverage 96.3%, precision 99.0%, dims
+10/12, corners 24/24, scale 5/6, actionable lint 0). No regression.
+
+**Remaining:** bare-feet (`23'`→`23`) need drawing context (dimension
+geometry) to recover — left honestly, queued as next text increment.
+
+**State at stop:** committed and pushed; tree clean.
+
+---
+
 ## 2026-07-23 — Claude Code — Text tier: synthetic corpus + reader baseline
 
 **Task:** TASKS.md P1 — text-tier synthetic pre-training. Training is

@@ -137,16 +137,18 @@ def _read_rapid(crop):
     res, _ = engine(crop, use_det=False, use_cls=False, use_rec=True)
     if not res:
         return ""
-    return smart_ocr._normalize(res[0][0])
+    # mirror the pipeline: neural normalize + dimension tick reconstruction
+    return smart_ocr.normalize_dimension(smart_ocr._normalize(res[0][0]))
 
 
 def _read_tesseract(crop):
     import pytesseract
+    import smart_ocr
     if crop.shape[0] < 32:
         s = 32.0 / crop.shape[0]
         crop = cv2.resize(crop, (max(8, int(crop.shape[1] * s)), 32))
-    return pytesseract.image_to_string(
-        crop, config="--psm 7").strip()
+    raw = pytesseract.image_to_string(crop, config="--psm 7").strip()
+    return smart_ocr.normalize_dimension(raw)
 
 
 def measure(n=200, seed=10000, engine="rapid"):

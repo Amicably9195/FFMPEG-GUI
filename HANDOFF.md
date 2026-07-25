@@ -1,11 +1,11 @@
 # HANDOFF — Start here
 
-**The single most important thing right now:** the text-tier data generator
-`synth_text.py` is built, and it gives a measured reader baseline on drafting
-text — **RapidOCR 88.3% exact / 97.2% char**, misses dominated by dropped
-feet/inch tick marks. The next unblocked task is **P1 in TASKS.md: fix the
-dropped tick marks** in `smart_ocr` post-processing (no GPU needed) — the
-cheapest large text win, measurable with `synth_text.py measure`.
+**The single most important thing right now:** dimension tick reconstruction
+just landed (`smart_ocr.normalize_dimension`) — synthetic drafting text is up
+to **96.7% exact** and the plan-benchmark OCR rose **80.0% → 83.3%** with no
+regression. The next unblocked task is **P1 in TASKS.md: recover bare-feet
+marks using drawing context** (`23'` → `23`) inside `scan2cad`, where the
+pipeline already knows which labels are dimensions.
 
 This file is overwritten at the end of every session (and at each 20–30 min
 checkpoint) with the current state, so the next engineer — Claude Code or
@@ -29,18 +29,21 @@ framework are committed and pushed; the tree is clean.
 - Added `open_polygon` + `impossible_intersection` lint checks to `verify.py`
   (high-precision; actionable stays 0).
 - Built `synth_text.py`: synthetic drafting-text corpus in flywheel format +
-  a measured reader baseline (RapidOCR 88.3% exact / 97.2% char). Misses are
-  dropped feet/inch tick marks.
+  a measured reader baseline.
+- Added `smart_ocr.normalize_dimension` (dimension tick reconstruction):
+  synthetic drafting text 88.3% → 96.7% exact; plan OCR 80.0% → 83.3%. No
+  regression. Non-dimension text is provably untouched.
 
 ## Do this next
 
 Run the standard session in `WORKFLOW.md`, then pick the highest-priority
 *unblocked* task:
 
-- **P1 (unblocked, best next increment):** fix dropped feet/inch tick marks
-  in `smart_ocr` post-processing (dimension-aware `'`/`"` reconstruction).
-  Measure before/after with `python synth_text.py measure` (baseline: 88.3%
-  exact). No GPU.
+- **P1 (unblocked, best next increment):** recover bare-feet marks
+  (`23'` → `23`) inside `scan2cad`, using the dimension-geometry pairing that
+  already exists to know which labels are dimensions (so callout numbers
+  stay untouched). Verify plan-benchmark dimension accuracy rises without
+  OCR/text regressing.
 - **P0 (blocked here):** wire curated fetchers + real regression suite —
   needs network + per-source license confirmation. Each fetcher must land in
   `dataset_builder.fetch`, never as an ad-hoc scrape.

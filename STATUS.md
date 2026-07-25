@@ -65,7 +65,7 @@ silently regress.
 |---|---|
 | Line coverage | 96.3% |
 | Line precision | 99.0% |
-| OCR / text | 80.0% |
+| OCR / text | 83.3% |
 | Dimension accuracy | 10/12 (83%) |
 | Circles / arcs | 3/6 (50%, dirty-scan declines) |
 | Dashed linetypes | 4/6 (67%, dirty-scan declines) |
@@ -96,12 +96,17 @@ a typical machine:
 1. **Text tier — the biggest lever.** Reading is the ceiling on everything
    now; most remaining misses trace back to it. A measured baseline exists:
    on synthetic drafting text (`python synth_text.py measure`) the neural
-   reader scores **88.3% exact / 97.2% char**, and the dominant miss is
-   *dropped feet/inch tick marks* (`7'-0"` → `7-0`) — a specific, fixable
-   weakness. Path: (a) dimension-aware tick reconstruction in post-processing
-   (free, next), then (b) synthetic pre-training + fine-tune the local reader
-   on the correction-flywheel data (**one-time GPU**). `synth_text.py`
-   generates unlimited labeled pairs in the flywheel format for both.
+   reader scored 88.3% exact / 97.2% char, and the dominant miss was
+   *dropped feet/inch tick marks* (`7'-0"` → `7-0`). A conservative,
+   dimension-only tick reconstruction (`smart_ocr.normalize_dimension`, which
+   never touches room names or bare numbers) has now closed most of that:
+   synthetic drafting text is up to **96.7% exact / 98.9% char**, and the
+   plan-benchmark OCR rose 80.0% → 83.3% with no regression elsewhere. Next:
+   (a) recover bare-feet marks using drawing context (the dimension geometry
+   already tells us which labels are dimensions), then (b) synthetic
+   pre-training + fine-tune the local reader on the correction-flywheel data
+   (**one-time GPU**). `synth_text.py` generates unlimited labeled pairs in
+   the flywheel format for both.
 2. **Verification / lint** *(first pass shipped).* `verify.py` flags doubled
    walls (duplicate geometry), dimensions that disagree with their own drawn
    length, and long lines floating free — advisory only, never auto-fixed,
