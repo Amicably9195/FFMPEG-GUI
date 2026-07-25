@@ -103,6 +103,8 @@ _None. (When you start a task, move it here and note it in HANDOFF.md.)_
 
 ## Done (recent — full history in CHANGELOG.md)
 
+- Faded-scan OCR contrast recovery (`_enhance_faded_ocr`, gated so clean
+  scans are byte-identical) — stress OCR 40% → 50%, guardrail unchanged.
 - Hard-case benchmark stress tier (`benchmark.py --hard RECIPE`) — geometry
   robust under degradation, text/scale fragile (OCR 40%); guardrail unchanged.
 - Circles: recover wall-connected columns (`_recover_connected_circles`,

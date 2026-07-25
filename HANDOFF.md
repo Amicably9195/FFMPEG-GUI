@@ -1,11 +1,12 @@
 # HANDOFF — Start here
 
-**The single most important thing right now:** a hard-case benchmark stress
-tier now exists — `python benchmark.py --hard appearance_hard` — and its first
-reading is the clearest signal for what to work on next: **geometry is robust
-under heavy scan degradation (circles 5/6, coverage 94%, corners 23/24) but
-text and scale collapse (OCR 40%, scale 0/6, dashed 0/6).** Text is the lever.
-The default guardrail run is unchanged. Tree clean, pushed, 54 tests green.
+**The single most important thing right now:** faded-scan OCR recovery just
+landed (`_enhance_faded_ocr`, bilateral denoise + stretch, gated so clean
+scans are byte-identical) — stress OCR **40% → 50%**, guardrail unchanged. Use
+the stress tier `python benchmark.py --hard appearance_hard` to measure text
+work. Remaining stress weak points: scale 0/6 and dashed 0/6 (dimension reads
+under heavy degradation aren't clean enough to lock scale — likely GPU
+fine-tune territory). Tree clean, pushed, 57 tests green.
 
 This file is overwritten at the end of every session (and at each 20–30 min
 checkpoint) with the current state, so the next engineer — Claude Code or

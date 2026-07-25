@@ -294,6 +294,23 @@ def _overlap(a, b):
     return inter / union if union else 0.0
 
 
+def _enhance_faded_ocr(gray):
+    """Restore contrast for the reader ONLY when the scan is faded - its
+    darkest strokes are gray, not black (photocopies, faded ink, sun-bleached
+    surveys, faxes). A clean scan has true-black strokes (2nd percentile near
+    0) and is returned untouched, so this can NEVER alter a normal drawing's
+    OCR. On a faded scan an edge-preserving bilateral filter lifts the copier
+    grain off the letters (a plain contrast stretch would only amplify it),
+    then the levels are stretched so strokes read black-on-white. Faithful: it
+    recovers contrast that degradation removed; it invents nothing."""
+    if np.percentile(gray, 2) <= 60:
+        return gray
+    g = cv2.bilateralFilter(gray, 7, 60, 60)
+    lo = float(np.percentile(g, 2))
+    g = (g.astype(np.float32) - lo) * (255.0 / max(1.0, 255.0 - lo))
+    return np.clip(g, 0, 255).astype(np.uint8)
+
+
 def ocr_words(gray, min_conf=30, vertical=True):
     """OCR horizontal text plus (optionally) both vertical orientations,
     de-duplicated by box overlap keeping the higher-confidence read."""
@@ -1461,8 +1478,8 @@ def convert(input_path, output_path=None, *,
             gray = rotate_bound(gray, angle)
             log(f"Deskewed by {angle:+.2f} degrees.")
 
-    gray_ocr = gray  # OCR always reads the sharp image; median filtering
-    # below is for linework only and would soften the letters
+    gray_ocr = _enhance_faded_ocr(gray)  # sharp image for OCR; contrast is
+    # restored only on faded/photocopied scans (clean scans pass untouched)
     ink = binarize(gray)
     if deep_clean:
         # dirty scans (old photocopies, blueprints): salt-and-pepper grain

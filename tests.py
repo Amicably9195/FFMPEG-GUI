@@ -128,6 +128,28 @@ def test_verify_detects_defects():
 
 
 # --------------------------------------------------------------------------
+# scan2cad._enhance_faded_ocr - clean scans must pass through untouched
+# --------------------------------------------------------------------------
+
+def test_enhance_faded_ocr_gate():
+    import scan2cad as c
+    print("scan2cad._enhance_faded_ocr - clean untouched, faded enhanced")
+    rng = np.random.default_rng(0)
+    # clean scan: white ground with true-black strokes -> must be UNTOUCHED
+    clean = np.full((80, 120), 255, np.uint8)
+    cv2.line(clean, (10, 40), (110, 40), 0, 3)
+    cv2.putText(clean, "24'-0\"", (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, 0, 2)
+    out = c._enhance_faded_ocr(clean)
+    check(np.array_equal(out, clean),
+          "clean (true-black) scan passes through byte-identical")
+    # faded scan: darkest strokes are gray -> enhancer engages and changes it
+    faded = np.clip(clean.astype(np.float32) * 0.4 + 150, 0, 255).astype(np.uint8)
+    out2 = c._enhance_faded_ocr(faded)
+    check(not np.array_equal(out2, faded), "faded scan is contrast-restored")
+    check(out2.shape == faded.shape, "shape preserved")
+
+
+# --------------------------------------------------------------------------
 # scan2cad._verify_ring - the gate that keeps circle recovery faithful
 # --------------------------------------------------------------------------
 
@@ -282,6 +304,7 @@ def main():
         test_provenance_never_loses_information,
         test_provenance_summarize,
         test_corrections_dedup,
+        test_enhance_faded_ocr_gate,
         test_verify_ring_gate,
         test_dataset_split_deterministic,
         test_dataset_degrade_records,

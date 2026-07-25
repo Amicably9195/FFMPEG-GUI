@@ -8,6 +8,29 @@ numbers, state at stop.
 
 ---
 
+## 2026-07-23 — Claude Code — Faded-scan OCR contrast recovery
+
+**Task:** attack the stress tier's weakest point (OCR 40%) safely.
+
+**Process:** designed a gate (2nd-percentile intensity) that cleanly
+separates clean (p2 0-18) from faded (p2 121-128) scans, so clean OCR is
+untouched by construction. First tried CLAHE — it AMPLIFIED photocopy grain
+and made stress OCR worse (40% → 30%); reverted. Prototyped denoise modes in
+scratchpad: bilateral (edge-preserving) doubled raw Tesseract recall
+(17% → 43%). Shipped bilateral denoise + level stretch.
+
+**Measured:** stress OCR 40% → 50%, precision 95.5% → 96.9%. Guardrail
+byte-identical (OCR 83.3%, all metrics unchanged). tests +3 → 57 (clean scan
+proven byte-identical through the enhancer; faded scan restored).
+
+**Note:** stress scale/dims still 0 — text recall rose but dimension reads
+aren't yet clean enough to lock scale under heavy degradation (GPU fine-tune
+territory).
+
+**State at stop:** committed and pushed; tree clean.
+
+---
+
 ## 2026-07-23 — Claude Code — Hard-case benchmark stress tier
 
 **Task:** the user's explicit priority — deliberately measure hard cases.

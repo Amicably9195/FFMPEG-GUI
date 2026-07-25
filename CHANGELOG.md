@@ -11,6 +11,21 @@ Format: `YYYY-MM-DD — <engineer> — <summary>` then bullets.
 
 ## Unreleased
 
+### 2026-07-23 — Claude Code — Faded-scan OCR contrast recovery
+- `scan2cad._enhance_faded_ocr`: on a faded/photocopied scan (darkest strokes
+  gray, not black), lift the copier grain off the letters with an
+  edge-preserving bilateral filter, then stretch levels so text reads
+  black-on-white. **Gated by the 2nd-percentile intensity** so a clean scan
+  (true-black strokes) passes through byte-identical — it can never alter a
+  normal drawing's OCR.
+- Found by experiment: a plain contrast stretch (CLAHE) *amplifies* the grain
+  and made stress OCR worse (40% → 30%); bilateral denoise-then-stretch is the
+  right tool (raw Tesseract recall on stress 17% → 43%).
+- **Measured:** stress tier (`--hard appearance_hard`) OCR **40% → 50%**,
+  precision 95.5% → 96.9%. **Guardrail byte-identical** (OCR 83.3%, coverage
+  96.7%, precision 98.9%, circ 5/6, corners 24/24, lint 0). `tests.py` +3 → 57
+  (clean scan proven untouched; faded scan restored).
+
 ### 2026-07-23 — Claude Code — Hard-case benchmark stress tier
 - `benchmark.py --hard RECIPE`: degrade every plan with a `dataset_builder`
   appearance-only recipe (`appearance_hard`, `faxed`, `old_photocopy`) before
