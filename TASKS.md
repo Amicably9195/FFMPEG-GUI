@@ -103,7 +103,11 @@ _None. (When you start a task, move it here and note it in HANDOFF.md.)_
 
 ## Done (recent — full history in CHANGELOG.md)
 
-- Test suite `tests.py` (37 checks, no pytest) guarding the faithfulness
+- Circles: recover wall-connected columns (`_recover_connected_circles`,
+  Hough + `_verify_ring` gate) — circles 3/6 → 5/6, coverage 96.3 → 96.7%
+  (recorded 0.1% precision trade, DECISIONS.md #10).
+- Benchmark health panel: per-object confidence + review-count readout.
+- Test suite `tests.py` (now 54 checks, no pytest) guarding the faithfulness
   invariants; CI `test` job gates the Windows build.
 - Text tier: dimension tick reconstruction (`smart_ocr.normalize_dimension`)
   — synthetic drafting text 88.3% → 96.7% exact; plan OCR 80.0% → 83.3%.

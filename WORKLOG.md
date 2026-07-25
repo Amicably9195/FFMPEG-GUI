@@ -8,6 +8,32 @@ numbers, state at stop.
 
 ---
 
+## 2026-07-23 — Claude Code — Recover wall-connected circles (3/6 → 5/6)
+
+**Task:** the circles/arcs (3/6) opportunity, done safely with real diagnosis.
+
+**Diagnosis (scratchpad, mirroring the benchmark's shared RNG):** the missed
+circles (plans 0/3/5) are columns whose ring is electrically connected to the
+wall network → one giant component (e.g. 371×722) → the lone-component test
+can't isolate them. The ring is fully drawn; recovering it invents nothing.
+
+**Prototyped before touching the engine:** Hough + a strict `_verify_ring`
+gate (≥33/36 sectors inked). Swept `param2`: 16 recovers plans 3 & 5 with
+ZERO false positives (wall corners/rooms fail the fill test). Plan 0's ring is
+too merged for Hough even when pushed — accepted 5/6 rather than risk FPs.
+
+**Shipped:** `_verify_ring`, `_refit_ring` (least-squares sharpen), and
+`_recover_connected_circles` as a second pass in `detect_circles`; erase the
+recovered ring so it isn't re-traced. Added a ring-gate test (54 checks).
+
+**Measured:** circles 3/6 → 5/6, coverage 96.3% → 96.7%; precision 99.0% →
+98.9% and info-lint +1 (hairline wall gap) — a deliberate trade recorded in
+DECISIONS.md #10. Corners 24/24, actionable lint 0, all else held.
+
+**State at stop:** committed and pushed; tree clean.
+
+---
+
 ## 2026-07-23 — Claude Code — Confidence readout in health panel
 
 **Task:** make per-object confidence visible in the guardrail ("confidence

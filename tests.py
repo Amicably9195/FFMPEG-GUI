@@ -20,6 +20,7 @@ benchmark can't isolate. Both run before every push.
 import json
 import math
 
+import cv2
 import numpy as np
 
 _fails = []
@@ -124,6 +125,30 @@ def test_verify_detects_defects():
     check(any(f["severity"] == "high" for f in dm
               if f["type"] == "dimension_mismatch"),
           "dimension_mismatch is high severity")
+
+
+# --------------------------------------------------------------------------
+# scan2cad._verify_ring - the gate that keeps circle recovery faithful
+# --------------------------------------------------------------------------
+
+def test_verify_ring_gate():
+    import scan2cad as c
+    print("scan2cad._verify_ring - accepts real rings, rejects non-rings")
+    ink = np.zeros((120, 120), np.uint8)
+    cv2.circle(ink, (60, 60), 30, 255, 2)          # a full drawn ring
+    conf = c._verify_ring(ink, 60, 60, 30, 8, 300)
+    check(conf is not None and conf > 0, "full ring accepted")
+    # an L of two walls meeting at a corner is NOT a ring
+    corner = np.zeros((120, 120), np.uint8)
+    cv2.line(corner, (60, 60), (110, 60), 255, 2)
+    cv2.line(corner, (60, 60), (60, 110), 255, 2)
+    check(c._verify_ring(corner, 60, 60, 30, 8, 300) is None,
+          "wall corner rejected (not a full turn)")
+    # a rectangular room is not a ring at the inscribed radius either
+    room = np.zeros((120, 120), np.uint8)
+    cv2.rectangle(room, (30, 30), (90, 90), 255, 2)
+    check(c._verify_ring(room, 60, 60, 30, 8, 300) is None,
+          "rectangular room rejected")
 
 
 # --------------------------------------------------------------------------
@@ -257,6 +282,7 @@ def main():
         test_provenance_never_loses_information,
         test_provenance_summarize,
         test_corrections_dedup,
+        test_verify_ring_gate,
         test_dataset_split_deterministic,
         test_dataset_degrade_records,
         test_dataset_jsonable,

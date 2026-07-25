@@ -1,11 +1,11 @@
 # HANDOFF — Start here
 
-**The single most important thing right now:** a long, clean session shipped
-10 committed increments (coordination layer, dataset_builder, synth_text +
-reader tooling, dimension tick reconstruction → plan OCR **80.0% → 83.3%**,
-two new lint checks, a 51-check test suite + CI gate, README, confidence
-readout). Tree is clean, all pushed, tests green. The best next task is a
-**focused session on circles/arcs (3/6)** — see "Do this next".
+**The single most important thing right now:** circle recovery just landed —
+**circles 3/6 → 5/6** and coverage 96.3% → 96.7% by re-finding columns whose
+ring touches a wall (Hough + strict `_verify_ring` gate), with a recorded 0.1%
+precision trade (DECISIONS.md #10). Tree clean, pushed, 54 tests green. Plan 0's
+circle is still missed (ring too merged for Hough) — the only remaining circle
+miss. Good next tasks below.
 
 This file is overwritten at the end of every session (and at each 20–30 min
 checkpoint) with the current state, so the next engineer — Claude Code or
@@ -53,18 +53,13 @@ framework are committed and pushed; the tree is clean.
 Run the standard session in `WORKFLOW.md`, then pick the highest-priority
 *unblocked* task:
 
-- **P1 (unblocked, best next increment) — circles/arcs 3/6, safely.** The
-  failure: `detect_circles` (scan2cad ~L702) only accepts a circle that is
-  its own isolated connected component; a column whose ring TOUCHES a wall
-  merges into one component and is dropped (even on clean plan 0). Recovering
-  it invents nothing — the full ring is present in the ink. Approach: for
-  components rejected as lone circles, search for a ring within them
-  (e.g. `cv2.HoughCircles` constrained to `[min_r, max_r]`), then accept ONLY
-  if it passes the SAME ring test detect_circles already uses (p95 residual +
-  ≥33/36 sectors filled). That gate is your precision protection. **Prove
-  precision stays ≥99% and coverage/corners hold** before keeping it; if a
-  wall corner sneaks a false circle, tighten or revert. Do NOT force full
-  circles from broken rings — that is invention (AI_RULES #1).
+- **P2 (unblocked) — more lint checks or deeper deterministic geometry.**
+  The circles pass is done (5/6). Remaining single circle miss is plan 0,
+  whose ring is too merged for Hough to seed; not worth chasing (risk > 1/6).
+  Options: (a) dashed-linetype recovery on dirty scans (4/6 → improve, same
+  care as circles — never invent dashes); (b) a Phase-B deterministic feature
+  (title-block extraction, line-weight estimation); (c) more `verify.py`
+  checks. Whatever you pick: benchmark before/after, keep actionable lint 0.
   - *Note:* bare-feet recovery (`23'`→`23`) was considered and deprioritized —
     the plan benchmark's dimensions are always `N'-M"`, so it can't be
     measured there, and blind recovery risks corrupting callout numbers.

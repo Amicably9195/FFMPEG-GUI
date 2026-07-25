@@ -141,3 +141,28 @@ interchangeable; the repo, not any engineer's context, is authoritative.
 **Reason:** If a fact lives only in an engineer's context window, it is lost
 at the next reset. Durable, shared, written state is the only way two
 memoryless engineers can hand off mid-task without redoing work.
+
+## 010 — Recover wall-connected circles, accepting a 0.1% precision trade
+*Accepted (recorded trade under AI_RULES #2).*
+
+**Context:** A column whose ring touches a wall merges into one connected
+component, so the lone-component circle test drops it (2 of 6 benchmark
+plans). The ring is fully drawn — recovering it invents nothing.
+
+**Decision:** Add a second pass (`_recover_connected_circles`): Hough proposes
+candidates, a least-squares refit sharpens each, and `_verify_ring` accepts
+only rings that are genuinely present (≥33/36 sectors inked, tight residual).
+The recovered ring is erased so it isn't re-traced as loose arcs.
+
+**The trade (measured):** circles **3/6 → 5/6**, line coverage **96.3% →
+96.7%**; the cost is line precision **99.0% → 98.9%** and info-lint +1, both
+from the hairline gap left where an erased ring crossed a wall. Corner closure
+(24/24) and actionable lint (0) held.
+
+**Reason:** Two real columns recovered as true CIRCLE entities is a
+substantial faithful gain; the 0.1% precision cost is at the noise floor and
+still above the ≥98% target, and it is a *gap* (missing pixels), never a wrong
+one. The `_verify_ring` gate — proven by `tests.py` to reject wall corners and
+rooms — is what keeps this from inventing circles. Recorded here because it is
+the first deliberate metric trade; forcing full circles from *broken* rings
+remains forbidden (Decision 001).

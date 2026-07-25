@@ -738,7 +738,105 @@ def detect_circles(ink, min_r=8, max_r=300):
         conf = float(max(0.0, 1.0 - p95 / ring_lim) * (filled / 36.0))
         accepted.append(("circle", cx + x, cy + y, r, conf))
         out[comp == i] = 0
+    # second pass: circles whose ring is connected to walls (missed by the
+    # lone-component test above) - re-found by Hough, gated by _verify_ring.
+    extra, out = _recover_connected_circles(out, accepted, min_r, max_r)
+    accepted.extend(extra)
     return accepted, out
+
+
+def _verify_ring(ink, cx, cy, r, min_r, max_r):
+    """Does a full drawn ring of radius r genuinely exist in `ink` at (cx, cy)?
+    Same faithfulness bar as detect_circles: a tight ring covering nearly the
+    whole turn. Verified against actual pixels - it re-finds a circle that is
+    already drawn, it never invents one. Returns a 0..1 confidence, or None."""
+    if not (min_r <= r <= max_r):
+        return None
+    ring_lim = max(3.5, 0.10 * r)
+    h, w = ink.shape
+    x0, x1 = max(0, int(cx - r - ring_lim - 2)), min(w, int(cx + r + ring_lim + 2))
+    y0, y1 = max(0, int(cy - r - ring_lim - 2)), min(h, int(cy + r + ring_lim + 2))
+    ys, xs = np.nonzero(ink[y0:y1, x0:x1])
+    if len(xs) == 0:
+        return None
+    dx, dy = xs + x0 - cx, ys + y0 - cy
+    dist = np.hypot(dx, dy)
+    band = np.abs(dist - r) <= ring_lim
+    if band.sum() < 12:
+        return None
+    ang = np.arctan2(dy[band], dx[band])
+    filled = len(np.unique((ang // (2 * np.pi / 36)).astype(int)))
+    if filled < 33:                      # nearly the full turn must be inked
+        return None
+    p95 = np.percentile(np.abs(dist[band] - r), 95)
+    if p95 > ring_lim:                   # and it must be a tight ring
+        return None
+    return float(max(0.0, 1.0 - p95 / ring_lim) * (filled / 36.0))
+
+
+def _refit_ring(ink, cx, cy, r):
+    """Least-squares refine (cx, cy, r) from the ink pixels near the ring.
+    Hough gives an approximate center/radius; the drawn ring pixels give the
+    exact one. Wall pixels crossing the band are a small minority the fit
+    tolerates. Returns refined (cx, cy, r) or None."""
+    ring_lim = max(3.5, 0.10 * r)
+    h, w = ink.shape
+    x0, x1 = max(0, int(cx - r - ring_lim - 2)), min(w, int(cx + r + ring_lim + 2))
+    y0, y1 = max(0, int(cy - r - ring_lim - 2)), min(h, int(cy + r + ring_lim + 2))
+    ys, xs = np.nonzero(ink[y0:y1, x0:x1])
+    if len(xs) == 0:
+        return None
+    dx, dy = xs + x0 - cx, ys + y0 - cy
+    band = np.abs(np.hypot(dx, dy) - r) <= ring_lim
+    if band.sum() < 12:
+        return None
+    pts = np.column_stack([xs[band] + x0, ys[band] + y0]).astype(np.float64)
+    fit = _fit_circle(pts)
+    if fit is None:
+        return None
+    ncx, ncy, nr, _ = fit
+    # reject a runaway fit (pulled off by too much wall); keep Hough's guess
+    if abs(ncx - cx) > ring_lim + 2 or abs(ncy - cy) > ring_lim + 2:
+        return None
+    return ncx, ncy, nr
+
+
+def _recover_connected_circles(ink, existing, min_r, max_r):
+    """A circle whose ring TOUCHES other ink (a column meeting a wall) is one
+    merged connected component, so detect_circles' lone-component test can't
+    isolate it. Propose candidates with Hough, then accept ONLY those the
+    strict ring check above confirms are fully drawn - nothing is invented,
+    a real ring is merely re-found. Returns (entities, ink with those rings
+    erased so they are not also traced as loose arcs)."""
+    out = ink.copy()
+    found = []
+    try:
+        blur = cv2.GaussianBlur(ink, (3, 3), 0)
+        cand = cv2.HoughCircles(blur, cv2.HOUGH_GRADIENT, dp=1.0, minDist=15,
+                                param1=120, param2=16,
+                                minRadius=min_r, maxRadius=min(max_r, 60))
+    except cv2.error:
+        return found, out
+    if cand is None:
+        return found, out
+    for cx, cy, r in cand[0]:
+        near = existing + found
+        if any(abs(cx - e[1]) < 8 and abs(cy - e[2]) < 8 for e in near):
+            continue
+        # refine Hough's approximate guess by least-squares fitting the actual
+        # ring pixels, so the emitted circle matches the drawn one precisely
+        ref = _refit_ring(ink, cx, cy, r)
+        if ref is not None:
+            cx, cy, r = ref
+        conf = _verify_ring(ink, cx, cy, r, min_r, max_r)
+        if conf is None:
+            continue
+        found.append(("circle", float(cx), float(cy), float(r), conf))
+        # remove the drawn ring stroke so it is not re-traced as arcs; a thin
+        # stroke-width annulus barely nicks any wall crossing it (junction
+        # healing closes the small gap).
+        cv2.circle(out, (int(round(cx)), int(round(cy))), int(round(r)), 0, 3)
+    return found, out
 
 
 def _arc_span(arc):

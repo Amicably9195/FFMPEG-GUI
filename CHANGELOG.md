@@ -11,6 +11,21 @@ Format: `YYYY-MM-DD — <engineer> — <summary>` then bullets.
 
 ## Unreleased
 
+### 2026-07-23 — Claude Code — Recover wall-connected circles (3/6 → 5/6)
+- `scan2cad`: a column whose ring touches a wall merges into one connected
+  component and was dropped by the lone-component circle test. New second pass
+  `_recover_connected_circles` re-finds it — Hough proposes, `_refit_ring`
+  sharpens by least-squares on the actual ring pixels, and `_verify_ring`
+  accepts ONLY rings genuinely present (≥33/36 sectors inked, tight residual).
+  The recovered ring is erased so it isn't re-traced as loose arcs. Invents
+  nothing: it re-finds a fully-drawn circle, never completes a broken one.
+- `tests.py` (+3 → 54 checks): `_verify_ring` accepts a full ring, rejects a
+  wall corner and a rectangular room — the gate that keeps recovery faithful.
+- **Measured:** circles **3/6 → 5/6 (83%)**, line coverage **96.3% → 96.7%**.
+  Trade (recorded, DECISIONS.md #10): line precision **99.0% → 98.9%** and
+  info-lint +1, from the hairline gap where an erased ring crosses a wall.
+  Corner closure 24/24 and actionable lint 0 held; OCR/dims/dashed/scale held.
+
 ### 2026-07-23 — Claude Code — Confidence readout in the benchmark health panel
 - `benchmark.py` reads the `.provenance.json` sidecar and adds two
   display-only lines to the health panel: **Confidence (avg)** per object type

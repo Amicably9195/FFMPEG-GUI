@@ -63,11 +63,11 @@ silently regress.
 
 | Metric | Value |
 |---|---|
-| Line coverage | 96.3% |
-| Line precision | 99.0% |
+| Line coverage | 96.7% |
+| Line precision | 98.9% |
 | OCR / text | 83.3% |
 | Dimension accuracy | 10/12 (83%) |
-| Circles / arcs | 3/6 (50%, dirty-scan declines) |
+| Circles / arcs | 5/6 (83%, incl. wall-connected columns) |
 | Dashed linetypes | 4/6 (67%, dirty-scan declines) |
 | Corner closure | 24/24 (100%) |
 | Scale locked | 5/6 (83%), avg err 0.26% |
