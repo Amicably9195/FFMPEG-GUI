@@ -293,6 +293,28 @@ def test_corrections_dedup():
            "different label saved as a new pair")
 
 
+def test_write_dxf_layers():
+    import os
+    import tempfile
+    import ezdxf
+    import scan2cad as c
+    print("scan2cad.write_dxf - semantic layer assignment")
+    segs = [(0, 0, 100, 0)]
+    dashed = [(0, 50, 100, 50)]
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "layers.dxf")
+        c.write_dxf(path, 200, segs, curves=[], words=[], dashed=dashed)
+        doc = ezdxf.readfile(path)
+        msp = doc.modelspace()
+        solid = [e for e in msp if e.dxftype() == "LINE"
+                 and e.dxf.linetype != "DASHED"]
+        hidden = [e for e in msp if e.dxftype() == "LINE"
+                  and e.dxf.linetype == "DASHED"]
+        eq(solid[0].dxf.layer, "LINES", "solid linework on LINES layer")
+        eq(hidden[0].dxf.layer, "HIDDEN",
+           "dashed linework moved to its own HIDDEN layer")
+
+
 def test_corrections_apply_end_to_end():
     import os
     import tempfile
@@ -330,6 +352,7 @@ def main():
         test_provenance_never_loses_information,
         test_provenance_summarize,
         test_corrections_dedup,
+        test_write_dxf_layers,
         test_corrections_apply_end_to_end,
         test_enhance_faded_ocr_gate,
         test_verify_ring_gate,

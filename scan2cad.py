@@ -1307,6 +1307,11 @@ def write_dxf(path, img_h, segments, curves, words, scale=1.0,
     doc = ezdxf.new("R2010", setup=True)
     doc.layers.add("LINES", color=7)
     doc.layers.add("CURVES", color=4)
+    if len(dashed):
+        # dashed/hidden linework (setback, hidden edges, center lines) belongs
+        # on its own layer by drafting convention, so a drafter can toggle it
+        # independently of the solid linework
+        doc.layers.add("HIDDEN", color=1)
     doc.layers.add("TEXT", color=3)
     # uncertain text lives on a hidden layer: the drawing opens clean, and
     # turning TEXT_REVIEW on shows the red marks for proofreading
@@ -1334,7 +1339,7 @@ def write_dxf(path, img_h, segments, curves, words, scale=1.0,
         doc.header["$LTSCALE"] = max(0.5, 20.0 * scale)
         for x1, y1, x2, y2 in dashed:
             msp.add_line(pt(x1, y1), pt(x2, y2),
-                         dxfattribs={"layer": "LINES",
+                         dxfattribs={"layer": "HIDDEN",
                                      "linetype": "DASHED"})
 
     for points, closed in curves:

@@ -11,6 +11,15 @@ Format: `YYYY-MM-DD — <engineer> — <summary>` then bullets.
 
 ## Unreleased
 
+### 2026-07-23 — Claude Code — Dashed linework on its own HIDDEN layer
+- `scan2cad.write_dxf`: dashed lines now go on a dedicated `HIDDEN` layer
+  (color 1) instead of being mixed into `LINES` — drafting convention, so a
+  drafter can toggle hidden/setback linework independently in AutoCAD or
+  MicroStation. (Phase-B "automatic layer inference", first step.)
+- Safe by construction: scoring reads dashed by `linetype`, not layer, so the
+  benchmark is byte-identical (dashed 4/6, all metrics unchanged). `tests.py`
+  +2 → 64 (solid → LINES, dashed → HIDDEN).
+
 ### 2026-07-23 — Claude Code — Test the correction flywheel end-to-end
 - `tests.py` (+5 → 62): an end-to-end test of `corrections.apply_corrections`
   — build a DXF with a misread label on TEXT_REVIEW, apply the fix, and verify
