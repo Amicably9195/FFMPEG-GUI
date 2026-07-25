@@ -8,6 +8,24 @@ numbers, state at stop.
 
 ---
 
+## 2026-07-23 — Claude Code — Extend test coverage
+
+**Task:** harden the safety net the two-engineer workflow depends on. First
+re-examined the circles/arcs metric (3/6) and **decided against** chasing it:
+on a broken ring, emitting an arc/nothing is the faithful behavior — forcing a
+full circle would invent the missing arc (violates AI_RULES #1), and loosening
+thresholds risks phantom circles at corners (precision). Wrong direction.
+
+**Did instead:** extended `tests.py` 37 → 51 checks covering `verify.summarize`,
+`provenance` never-lose-information + summarize, and `corrections.save_pair`
+dedup. Ran the new modules through their contracts.
+
+**Result:** PASSED all 51 checks; no production bug found. Benchmark untouched.
+
+**State at stop:** committed and pushed; tree clean.
+
+---
+
 ## 2026-07-23 — Claude Code — Top-level README
 
 **Task:** give the growing repo (13 modules + 7 coordination docs) one entry

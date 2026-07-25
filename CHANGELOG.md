@@ -11,6 +11,14 @@ Format: `YYYY-MM-DD — <engineer> — <summary>` then bullets.
 
 ## Unreleased
 
+### 2026-07-23 — Claude Code — Extend tests to more faithfulness invariants
+- `tests.py` grows from 37 to 51 checks, now covering: `verify.summarize`
+  tallies; `provenance.build_records` **never loses information** (an
+  unclassified curve is kept as a polyline and flagged for review, low-conf
+  circles are flagged); `provenance.summarize` per-type averages + review
+  count; `corrections.save_pair` de-dup (an identical fix is stored once, a
+  new label is a new pair). No production bug surfaced — the contracts hold.
+
 ### 2026-07-23 — Claude Code — Top-level README (landing page)
 - `README.md`: single entry point orienting both users and the AI engineers —
   the doctrine, a user quick-start (pointing at README_Drawing2CAD.md), the

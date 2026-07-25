@@ -169,6 +169,83 @@ def test_dataset_jsonable():
     eq(clean["i"], 3, "int64 -> python int")
 
 
+# --------------------------------------------------------------------------
+# verify.summarize
+# --------------------------------------------------------------------------
+
+def test_verify_summarize():
+    import verify
+    print("verify.summarize - severity/type tallies")
+    findings = [
+        {"type": "duplicate", "severity": "medium", "at": [0, 0]},
+        {"type": "sliver", "severity": "low", "at": [1, 1]},
+        {"type": "sliver", "severity": "low", "at": [2, 2]},
+    ]
+    s = verify.summarize(findings)
+    eq(s["total"], 3, "total counted")
+    eq(s["by_type"]["sliver"], 2, "by_type tallies slivers")
+    eq(s["by_severity"]["low"], 2, "by_severity tallies low")
+    eq(s["by_severity"]["medium"], 1, "by_severity tallies medium")
+    eq(verify.summarize([])["total"], 0, "empty -> 0 total")
+
+
+# --------------------------------------------------------------------------
+# provenance - never lose information
+# --------------------------------------------------------------------------
+
+def test_provenance_never_loses_information():
+    import provenance
+    print("provenance.build_records - never lose information")
+    # one of every kind of input, incl. an UNCLASSIFIED curve
+    segments = [(0, 0, 10, 0)]
+    curves = [([(1, 1), (2, 2), (3, 1)], False)]     # unknown geometry
+    rounds = [("circle", 5, 5, 4, 0.30)]             # low-confidence circle
+    words = [{"text": "BATH", "conf": 90, "x": 0, "y": 0, "w": 5, "h": 5,
+              "rotation": 0, "review": False}]
+    rec = provenance.build_records(segments=segments, curves=curves,
+                                   rounds=rounds, words=words)
+    eq(len(rec), 4, "one record per input object (nothing dropped)")
+    poly = [r for r in rec if r["type"] == "polyline"]
+    eq(len(poly), 1, "unclassified curve is KEPT as a polyline")
+    check(poly[0]["review"] is True,
+          "unclassified geometry is flagged for review, not deleted")
+    circ = [r for r in rec if r["type"] == "circle"][0]
+    check(circ["review"] is True, "low-confidence circle flagged for review")
+
+
+def test_provenance_summarize():
+    import provenance
+    print("provenance.summarize - per-type averages + review count")
+    rec = [
+        {"type": "line", "confidence": 0.9, "review": False},
+        {"type": "line", "confidence": 0.7, "review": False},
+        {"type": "text", "confidence": 0.5, "review": True},
+    ]
+    s = provenance.summarize(rec)
+    eq(s["line"]["count"], 2, "line count")
+    check(abs(s["line"]["avg_confidence"] - 0.8) < 1e-6, "line avg confidence")
+    eq(s["_review_items"], 1, "review items counted")
+
+
+# --------------------------------------------------------------------------
+# corrections - training-pair dedup (one drawing's fix saved once)
+# --------------------------------------------------------------------------
+
+def test_corrections_dedup():
+    import tempfile
+    import corrections
+    print("corrections.save_pair - dedup")
+    crop = np.full((20, 40), 200, np.uint8)
+    with tempfile.TemporaryDirectory() as d:
+        corrections.save_pair(crop, "KITCHEN", dataset_dir=d)
+        corrections.save_pair(crop, "KITCHEN", dataset_dir=d)   # same pair
+        eq(corrections.dataset_size(dataset_dir=d), 1,
+           "identical (crop,text) saved once")
+        corrections.save_pair(crop, "BEDROOM", dataset_dir=d)   # new label
+        eq(corrections.dataset_size(dataset_dir=d), 2,
+           "different label saved as a new pair")
+
+
 def main():
     tests = [
         test_normalize_dimension,
@@ -176,6 +253,10 @@ def main():
         test_verify_never_mutates,
         test_verify_clean_plan,
         test_verify_detects_defects,
+        test_verify_summarize,
+        test_provenance_never_loses_information,
+        test_provenance_summarize,
+        test_corrections_dedup,
         test_dataset_split_deterministic,
         test_dataset_degrade_records,
         test_dataset_jsonable,

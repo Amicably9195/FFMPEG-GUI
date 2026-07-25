@@ -33,9 +33,15 @@ framework are committed and pushed; the tree is clean.
 - Added `smart_ocr.normalize_dimension` (dimension tick reconstruction):
   synthetic drafting text 88.3% → 96.7% exact; plan OCR 80.0% → 83.3%. No
   regression. Non-dimension text is provably untouched.
-- Added `tests.py` (37 checks, no pytest) guarding the faithfulness
-  invariants, wired into CI (build `needs: test`) and WORKFLOW step 6.
-  Run `python tests.py` before every push.
+- Added `tests.py` (now 51 checks, no pytest) guarding the faithfulness
+  invariants — reader, verify, provenance (never-lose-information),
+  corrections dedup, dataset split/dedup. Wired into CI (build `needs: test`)
+  and WORKFLOW step 6. Run `python tests.py` before every push.
+- Note for the next engineer: the circles/arcs metric (3/6) was examined and
+  deliberately NOT chased — forcing full circles from broken rings would
+  invent geometry (AI_RULES #1). If you revisit it, only recover circles
+  whose full ring is genuinely present (e.g. a column touching a wall that
+  the component-merge currently drops), and prove precision stays 99%.
 - Added top-level `README.md` — the landing page for users and engineers
   (doctrine, onboarding order, module map, coordination-doc table).
 
