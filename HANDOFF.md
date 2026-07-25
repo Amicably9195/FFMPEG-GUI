@@ -1,12 +1,13 @@
 # HANDOFF — Start here
 
-**The single most important thing right now:** faded-scan OCR recovery just
-landed (`_enhance_faded_ocr`, bilateral denoise + stretch, gated so clean
-scans are byte-identical) — stress OCR **40% → 50%**, guardrail unchanged. Use
-the stress tier `python benchmark.py --hard appearance_hard` to measure text
-work. Remaining stress weak points: scale 0/6 and dashed 0/6 (dimension reads
-under heavy degradation aren't clean enough to lock scale — likely GPU
-fine-tune territory). Tree clean, pushed, 57 tests green.
+**The single most important thing right now:** working autonomously (owner
+away, "everything a yes"). Recent Phase-B additions: line-weight estimation
+(`estimate_lineweights` — bold walls vs fine lines, gated so uniform drawings
+are untouched), dashed→HIDDEN layer, and `benchmark.py --hard all` robustness
+table. Default guardrail byte-identical throughout (96.7/98.9, OCR 83.3, circ
+5/6, corners 24/24, lint 0). Tree clean, pushed, 69 tests green. The remaining
+big lever is still text under degradation → GPU fine-tune (corpus tooling
+ready in `synth_text.py`).
 
 This file is overwritten at the end of every session (and at each 20–30 min
 checkpoint) with the current state, so the next engineer — Claude Code or

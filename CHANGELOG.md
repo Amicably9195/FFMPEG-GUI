@@ -11,6 +11,19 @@ Format: `YYYY-MM-DD — <engineer> — <summary>` then bullets.
 
 ## Unreleased
 
+### 2026-07-23 — Claude Code — Line-weight estimation (Phase B)
+- `scan2cad.estimate_lineweights`: measures each centerline's true stroke
+  width from the ink distance transform and buckets it — relative to the
+  drawing's own median — into thin / normal / thick DXF lineweights (0.18 /
+  0.25 / 0.50 mm), so the lineweight hierarchy a drafter relies on (bold
+  walls, fine dimension/leader lines) survives conversion. `write_dxf` applies
+  them and sets `$LWDISPLAY`.
+- Faithful + safe by construction: it measures what is drawn and **returns
+  None when the drawing has no real width variation**, so a uniform-width
+  drawing (like every synthetic benchmark plan) is left untouched — the
+  benchmark is byte-identical (96.7/98.9, OCR 83.3, circ 5/6, corners 24/24,
+  lint 0). `tests.py` +5 → 69 (bold→thick, fine→thin, uniform→None).
+
 ### 2026-07-23 — Claude Code — `benchmark.py --hard all` robustness table
 - `--hard all` sweeps every appearance-only recipe (clean, old_photocopy,
   faxed, appearance_hard) and prints a one-look robustness table showing how

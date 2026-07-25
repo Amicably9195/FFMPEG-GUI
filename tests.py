@@ -293,6 +293,33 @@ def test_corrections_dedup():
            "different label saved as a new pair")
 
 
+def test_estimate_lineweights():
+    import scan2cad as c
+    print("scan2cad.estimate_lineweights - width hierarchy + uniform gate")
+    # three bold strokes (width 9) + three fine strokes (width 3)
+    ink = np.zeros((300, 600), np.uint8)
+    segs = []
+    for y in (40, 70, 100):
+        cv2.line(ink, (40, y), (560, y), 255, 9)
+        segs.append((40, y, 560, y))
+    for y in (180, 210, 240):
+        cv2.line(ink, (40, y), (560, y), 255, 3)
+        segs.append((40, y, 560, y))
+    lw = c.estimate_lineweights(ink, np.array(segs, float))
+    check(lw is not None, "varied-width drawing gets lineweights")
+    check(all(v == c._LW_THICK for v in lw[:3]), "bold strokes -> thick")
+    check(all(v == c._LW_THIN for v in lw[3:]), "fine strokes -> thin")
+    check(c._LW_THICK > c._LW_THIN, "thick weight > thin weight")
+    # a uniform-width drawing must get nothing (no fabricated hierarchy)
+    uni = np.zeros((300, 600), np.uint8)
+    us = []
+    for y in (40, 70, 100, 130):
+        cv2.line(uni, (40, y), (560, y), 255, 4)
+        us.append((40, y, 560, y))
+    check(c.estimate_lineweights(uni, np.array(us, float)) is None,
+          "uniform-width drawing gets no lineweights (nothing invented)")
+
+
 def test_write_dxf_layers():
     import os
     import tempfile
@@ -352,6 +379,7 @@ def main():
         test_provenance_never_loses_information,
         test_provenance_summarize,
         test_corrections_dedup,
+        test_estimate_lineweights,
         test_write_dxf_layers,
         test_corrections_apply_end_to_end,
         test_enhance_faded_ocr_gate,

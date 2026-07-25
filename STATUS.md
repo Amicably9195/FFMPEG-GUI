@@ -36,10 +36,12 @@ files — DXF natively, DWG/DGN via the free ODA File Converter.
 clean fall-back to DXF (which AutoCAD and MicroStation open natively) when
 it isn't.
 
-**Geometry:** clean centerline tracing, true LINE / ARC / CIRCLE entities,
-dashed-linetype preservation, editable DIMENSION entities, precise corner
-closure, endpoint snapping, and topology cleanup that preserves the original
-drawing rather than reinterpreting it.
+**Geometry:** clean centerline tracing, true LINE / ARC / CIRCLE entities
+(including columns whose ring touches a wall), dashed-linetype preservation on
+a dedicated HIDDEN layer, editable DIMENSION entities, measured line-weight
+preservation (bold walls vs fine lines), precise corner closure, endpoint
+snapping, and topology cleanup that preserves the original drawing rather than
+reinterpreting it.
 
 **Text & scale:** free offline neural text reading (Tesseract + RapidOCR);
 auto-scale to real feet when dimensions agree, an honest "can't tell"

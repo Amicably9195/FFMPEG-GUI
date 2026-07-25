@@ -8,6 +8,29 @@ numbers, state at stop.
 
 ---
 
+## 2026-07-23 — Claude Code — Line-weight estimation (Phase B, autonomous)
+
+**Task:** owner away, "everything is a yes" — took the Phase-B line-weight
+feature I'd flagged as needing approval.
+
+**Did:** `estimate_lineweights(ink, segments)` — samples each centerline's
+stroke width from the distance transform (interior only; junctions inflate
+ends), buckets relative to the drawing's median into thin/normal/thick DXF
+lineweights. `write_dxf` applies them + sets $LWDISPLAY.
+
+**Safe by construction:** returns None when there's no real width variation,
+so uniform drawings (all benchmark plans) are untouched → benchmark
+byte-identical. Verified.
+
+**Validation path:** direct unit test (bold width-9 → 50, fine width-3 → 18,
+uniform → None) after tuning bucket thresholds (first pass put bold walls on
+normal because equal thick/thin populations sit the median between them;
+loosened to 0.8×/1.25×med). +5 tests → 69. Benchmark unchanged.
+
+**State at stop:** committed and pushed; tree clean.
+
+---
+
 ## 2026-07-23 — Claude Code — Robustness table + HIDDEN layer
 
 **Two small safe increments (deterministic fruit mostly picked):**

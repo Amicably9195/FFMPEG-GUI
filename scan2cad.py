@@ -215,6 +215,60 @@ def stroke_width(ink):
     return max(1.5, 2.0 * float(np.median(vals)))
 
 
+# Standard DXF lineweights (1/100 mm) for the three classes we distinguish.
+_LW_THIN, _LW_NORMAL, _LW_THICK = 18, 25, 50
+
+
+def estimate_lineweights(ink, segments):
+    """Per-segment DXF lineweight from measured stroke width, or None.
+
+    Reads each centerline's true stroke width from the distance transform of
+    the ink (the value on the ridge is the stroke half-width) and buckets it -
+    relative to the drawing's OWN median - into thin / normal / thick. This
+    preserves the lineweight hierarchy a drafter relies on (bold walls, fine
+    dimension and leader lines) without inventing anything: it measures what
+    is drawn.
+
+    Returns None when the drawing has no meaningful width variation (every
+    stroke the same weight), so a uniform drawing is left with the default
+    weight and nothing is fabricated.
+    """
+    n = len(segments)
+    if n < 4:
+        return None
+    dist = cv2.distanceTransform(ink, cv2.DIST_L2, 3)
+    h, w = ink.shape
+    widths = np.full(n, np.nan)
+    for i, (x1, y1, x2, y2) in enumerate(segments):
+        m = max(3, int(math.hypot(x2 - x1, y2 - y1) // 4))
+        # sample the interior only - junctions at the ends inflate the width
+        ts = np.linspace(0.15, 0.85, m)
+        xs = np.clip((x1 + (x2 - x1) * ts).astype(int), 0, w - 1)
+        ys = np.clip((y1 + (y2 - y1) * ts).astype(int), 0, h - 1)
+        d = dist[ys, xs]
+        d = d[d > 0]
+        if d.size:
+            widths[i] = 2.0 * float(np.median(d))
+    valid = widths[~np.isnan(widths)]
+    if valid.size < 4:
+        return None
+    med = float(np.median(valid))
+    spread = float(np.percentile(valid, 90) - np.percentile(valid, 10))
+    if med <= 0 or spread < 0.6 * med:      # essentially uniform - do nothing
+        return None
+    out = []
+    for wd in widths:
+        if np.isnan(wd):
+            out.append(_LW_NORMAL)
+        elif wd < 0.8 * med:
+            out.append(_LW_THIN)
+        elif wd > 1.25 * med:
+            out.append(_LW_THICK)
+        else:
+            out.append(_LW_NORMAL)
+    return out
+
+
 # ── OCR ────────────────────────────────────────────────────────────────────────
 
 def _ocr_pass(gray, rotate_code, cad_rotation, min_conf):
@@ -1303,8 +1357,10 @@ def residual_curves(ink, segs, width, min_area=40, epsilon=1.8):
 
 def write_dxf(path, img_h, segments, curves, words, scale=1.0,
               min_len_px=6.0, units_feet=False, rounds=(), dashed=(),
-              dims=()):
+              dims=(), lineweights=None):
     doc = ezdxf.new("R2010", setup=True)
+    if lineweights is not None:
+        doc.header["$LWDISPLAY"] = 1   # show the recovered lineweights
     doc.layers.add("LINES", color=7)
     doc.layers.add("CURVES", color=4)
     if len(dashed):
@@ -1328,10 +1384,13 @@ def write_dxf(path, img_h, segments, curves, words, scale=1.0,
         return (x * scale, (img_h - y) * scale)
 
     n_lines = 0
-    for x1, y1, x2, y2 in segments:
+    for i, (x1, y1, x2, y2) in enumerate(segments):
         if math.hypot(x2 - x1, y2 - y1) < min_len_px:
             continue
-        msp.add_line(pt(x1, y1), pt(x2, y2), dxfattribs={"layer": "LINES"})
+        attribs = {"layer": "LINES"}
+        if lineweights is not None and i < len(lineweights):
+            attribs["lineweight"] = lineweights[i]
+        msp.add_line(pt(x1, y1), pt(x2, y2), dxfattribs=attribs)
         n_lines += 1
 
     if len(dashed):
@@ -1632,10 +1691,15 @@ def convert(input_path, output_path=None, *,
         log(f"{n_review} uncertain text items moved to red TEXT_REVIEW layer "
             f"(boxed on the drawing) - double-check those by hand.")
 
+    lineweights = (estimate_lineweights(line_img, segs)
+                   if len(segs) else None)
     n_lines = write_dxf(output_path, gray.shape[0], segs, curves, words,
                         scale=scale, min_len_px=min_line_px,
                         units_feet=units_feet, rounds=rounds, dashed=dashed,
-                        dims=dim_pairs)
+                        dims=dim_pairs, lineweights=lineweights)
+    if lineweights is not None:
+        log("Estimated line weights from stroke width "
+            "(bold walls vs fine lines preserved).")
     log(f"Wrote {output_path}  ({n_lines} lines, {len(dashed)} dashed, "
         f"{len(curves)} polylines, {len(rounds)} circles/arcs, "
         f"{len(dim_pairs)} dimensions, {len(words)} text entities)")

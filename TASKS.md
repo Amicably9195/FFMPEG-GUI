@@ -103,6 +103,10 @@ _None. (When you start a task, move it here and note it in HANDOFF.md.)_
 
 ## Done (recent — full history in CHANGELOG.md)
 
+- Line-weight estimation (`estimate_lineweights`) — thin/normal/thick DXF
+  lineweights from measured stroke width; uniform drawings untouched.
+- Dashed linework → dedicated HIDDEN layer; `benchmark.py --hard all`
+  robustness table.
 - Faded-scan OCR contrast recovery (`_enhance_faded_ocr`, gated so clean
   scans are byte-identical) — stress OCR 40% → 50%, guardrail unchanged.
 - Hard-case benchmark stress tier (`benchmark.py --hard RECIPE`) — geometry
