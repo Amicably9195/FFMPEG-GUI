@@ -293,6 +293,32 @@ def test_corrections_dedup():
            "different label saved as a new pair")
 
 
+def test_corrections_apply_end_to_end():
+    import os
+    import tempfile
+    import ezdxf
+    import corrections
+    print("corrections.apply_corrections - patch text + promote off review")
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "drawing.dxf")
+        doc = ezdxf.new()
+        doc.layers.add("TEXT")
+        doc.layers.add("TEXT_REVIEW", color=1)
+        msp = doc.modelspace()
+        msp.add_text("8ATH", dxfattribs={"layer": "TEXT_REVIEW"})   # a misread
+        msp.add_text("KITCHEN", dxfattribs={"layer": "TEXT"})       # a good one
+        doc.saveas(path)
+        n = corrections.apply_corrections(path, [(0, "BATH", "8ATH")])
+        eq(n, 1, "one entity updated")
+        out = ezdxf.readfile(path)
+        texts = {e.dxf.text: e.dxf.layer for e in out.modelspace()
+                 if e.dxftype() == "TEXT"}
+        check("BATH" in texts, "misread text was corrected")
+        check("8ATH" not in texts, "old misread text is gone")
+        eq(texts.get("BATH"), "TEXT", "corrected label promoted off review")
+        eq(texts.get("KITCHEN"), "TEXT", "untouched good label stays put")
+
+
 def main():
     tests = [
         test_normalize_dimension,
@@ -304,6 +330,7 @@ def main():
         test_provenance_never_loses_information,
         test_provenance_summarize,
         test_corrections_dedup,
+        test_corrections_apply_end_to_end,
         test_enhance_faded_ocr_gate,
         test_verify_ring_gate,
         test_dataset_split_deterministic,

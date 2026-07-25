@@ -11,6 +11,14 @@ Format: `YYYY-MM-DD — <engineer> — <summary>` then bullets.
 
 ## Unreleased
 
+### 2026-07-23 — Claude Code — Test the correction flywheel end-to-end
+- `tests.py` (+5 → 62): an end-to-end test of `corrections.apply_corrections`
+  — build a DXF with a misread label on TEXT_REVIEW, apply the fix, and verify
+  the text is corrected, the entity is promoted onto the TEXT layer, and an
+  untouched good label is left alone. Locks in the trust-critical human loop.
+- Also verified (scratchpad) the pipeline handles degenerate inputs (blank,
+  all-ink, tiny, noise-only, single-line) without crashing — no fix needed.
+
 ### 2026-07-23 — Claude Code — Faded-scan OCR contrast recovery
 - `scan2cad._enhance_faded_ocr`: on a faded/photocopied scan (darkest strokes
   gray, not black), lift the copier grain off the letters with an
