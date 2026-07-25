@@ -11,6 +11,20 @@ Format: `YYYY-MM-DD — <engineer> — <summary>` then bullets.
 
 ## Unreleased
 
+### 2026-07-23 — Claude Code — VISION.md + green/yellow/red review tiers
+- `VISION.md`: adopted the refined vision/architecture doc as the canonical
+  north star (compiler-pipeline framing, full input/output/module maps, the
+  semantic-AI tier as a *target*). Honest preamble + a "build status today"
+  section separate vision from what's shipped, pointing at STATUS/ROADMAP so
+  the doc can never be read as claiming unbuilt capabilities.
+- `provenance.tier()`: maps each object's 0–1 confidence to a green / yellow /
+  red review tier (red also whenever an object is flagged for review, however
+  high its score). Every provenance record is stamped with its `tier`;
+  `summarize` counts `_tiers`; the benchmark health panel shows the
+  green/yellow/red split (benchmark reads: green 487, yellow 0, red 15).
+- Guardrail byte-identical; `tests.py` +8 → 77 (tier thresholds, flagged→red,
+  record stamping, summary counts).
+
 ### 2026-07-23 — Claude Code — Text-tier fine-tune runbook
 - `FINETUNE.md`: a turnkey recipe for the project's one blocked lever — the
   local reader fine-tune. Documents the PP-OCR-rec-in-PaddleOCR → ONNX path

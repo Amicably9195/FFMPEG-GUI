@@ -41,6 +41,8 @@ through the repo. If you are one of them, read these first, in order:
    take turns without colliding.
 4. **[STATUS.md](STATUS.md)** · **[ROADMAP.md](ROADMAP.md)** — where the
    project stands and the phased plan.
+5. **[VISION.md](VISION.md)** — the north star (target architecture; aspirational).
+   **[FINETUNE.md](FINETUNE.md)** — the runbook for the text-tier GPU fine-tune.
 
 Then: `git pull` → read the above → `python tests.py && python benchmark.py`
 for the baseline → pick the top task in **[TASKS.md](TASKS.md)** → make one

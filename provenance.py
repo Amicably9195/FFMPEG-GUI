@@ -21,6 +21,20 @@ import math
 import os
 
 
+def tier(confidence, review=False):
+    """Map a 0..1 confidence to a traffic-light review tier (VISION.md):
+      green  - high confidence, minimal review
+      yellow - moderate confidence, recommended review
+      red    - low confidence OR explicitly flagged, manual verification
+    An object already flagged for review is always red, however high its raw
+    score - the flag is a stronger signal than the number."""
+    if review or confidence < 0.4:
+        return "red"
+    if confidence < 0.75:
+        return "yellow"
+    return "green"
+
+
 def _line_conf(x1, y1, x2, y2):
     """Straight lines are deterministic geometry - high, length-scaled trust
     (a 4px nub is less certain than a 400px wall)."""
@@ -93,6 +107,9 @@ def build_records(*, segments=(), dashed=(), rounds=(), curves=(),
             "at": [round(float(span[0]), 1), round(float(span[1]), 1),
                    round(float(span[2]), 1), round(float(span[3]), 1)]})
 
+    # stamp every object with its green/yellow/red review tier
+    for r in rec:
+        r["tier"] = tier(r["confidence"], r.get("review", False))
     return rec
 
 
@@ -106,6 +123,10 @@ def summarize(records):
            for t, v in by.items()}
     out["_review_items"] = sum(1 for r in records if r.get("review"))
     out["_total"] = len(records)
+    out["_tiers"] = {c: sum(1 for r in records
+                            if r.get("tier", tier(r["confidence"],
+                                                  r.get("review", False))) == c)
+                     for c in ("green", "yellow", "red")}
     return out
 
 

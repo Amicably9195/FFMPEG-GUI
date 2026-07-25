@@ -260,6 +260,27 @@ def test_provenance_never_loses_information():
     check(circ["review"] is True, "low-confidence circle flagged for review")
 
 
+def test_provenance_tiers():
+    import provenance
+    print("provenance.tier - green/yellow/red review tiers")
+    eq(provenance.tier(0.95), "green", "high confidence -> green")
+    eq(provenance.tier(0.6), "yellow", "moderate confidence -> yellow")
+    eq(provenance.tier(0.2), "red", "low confidence -> red")
+    eq(provenance.tier(0.99, review=True), "red",
+       "flagged-for-review is always red, however high the score")
+    # tiers stamped on records and counted in the summary
+    rec = provenance.build_records(
+        segments=[(0, 0, 400, 0)],                    # long line -> green
+        words=[{"text": "?", "conf": 20, "x": 0, "y": 0, "w": 5, "h": 5,
+                "rotation": 0, "review": True}])       # flagged -> red
+    tiers = {r["type"]: r["tier"] for r in rec}
+    eq(tiers["line"], "green", "confident long line stamped green")
+    eq(tiers["text"], "red", "flagged text stamped red")
+    s = provenance.summarize(rec)
+    eq(s["_tiers"]["green"], 1, "summary counts one green")
+    eq(s["_tiers"]["red"], 1, "summary counts one red")
+
+
 def test_provenance_summarize():
     import provenance
     print("provenance.summarize - per-type averages + review count")
@@ -377,6 +398,7 @@ def main():
         test_verify_detects_defects,
         test_verify_summarize,
         test_provenance_never_loses_information,
+        test_provenance_tiers,
         test_provenance_summarize,
         test_corrections_dedup,
         test_estimate_lineweights,

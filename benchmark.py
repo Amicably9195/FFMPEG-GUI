@@ -397,10 +397,15 @@ def _run(args, hard_recipe):
     # in the guardrail; does not affect any score above)
     if prov_summaries:
         agg_conf, review_total = {}, 0
+        tiers = {"green": 0, "yellow": 0, "red": 0}
         for s in prov_summaries:
             for t, v in s.items():
                 if t == "_review_items":
                     review_total += v
+                    continue
+                if t == "_tiers":
+                    for k in tiers:
+                        tiers[k] += v.get(k, 0)
                     continue
                 if t.startswith("_"):        # _total and other meta keys
                     continue
@@ -410,6 +415,9 @@ def _run(args, hard_recipe):
         parts = ", ".join(f"{t} {w / c:.2f}"
                           for t, (w, c) in sorted(agg_conf.items()) if c)
         print(f"  Confidence (avg)   {parts}")
+        print(f"  Review tiers       green {tiers['green']}, "
+              f"yellow {tiers['yellow']}, red {tiers['red']}  "
+              f"(green=minimal, yellow=recommended, red=verify)")
         print(f"  Flagged for review {review_total}  "
               f"(objects the reviewer should check first)")
     print("=" * 44)

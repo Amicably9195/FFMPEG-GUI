@@ -8,6 +8,26 @@ numbers, state at stop.
 
 ---
 
+## 2026-07-23 — Claude Code — VISION.md + green/yellow/red tiers
+
+**Task:** owner shared a refined vision/architecture doc. Assessed it against
+reality (most of it already our doctrine + shipped; genuinely new:
+compiler-pipeline framing, G/Y/R tiers; aspirational: semantic-AI tier,
+constraint solver, title-block, SVG). Adopted it honestly.
+
+**Did:** (1) `VISION.md` — the doc as canonical north star with a preamble +
+"build status today" section separating vision from shipped, so it can't be
+read as overclaiming. (2) `provenance.tier()` — 0..1 confidence → green/yellow/
+red (flagged→red always); stamped on every record, counted in summarize,
+surfaced in the benchmark panel (green 487 / yellow 0 / red 15).
+
+**Result:** guardrail byte-identical; tests +8 → 77. README points at
+VISION/FINETUNE.
+
+**State at stop:** committed and pushed; tree clean.
+
+---
+
 ## 2026-07-23 — Claude Code — Line-weight estimation (Phase B, autonomous)
 
 **Task:** owner away, "everything is a yes" — took the Phase-B line-weight
