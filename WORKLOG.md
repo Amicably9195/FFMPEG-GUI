@@ -8,6 +8,21 @@ numbers, state at stop.
 
 ---
 
+## 2026-07-23 — Claude Code — Traffic-light text layers
+
+**Task:** make the G/Y/R tiers real in the DXF, not just the sidecar.
+
+**Did:** `write_dxf` routes each text label to TEXT (green) / TEXT_CHECK
+(yellow, visible) / TEXT_REVIEW (red, hidden+boxed) via `provenance.tier()` —
+same mapping as the sidecar, one source of truth. Flagged → always red.
+
+**Safe:** benchmark scores TEXT entities by string not layer → OCR 83.3% and
+whole guardrail byte-identical. tests +3 → 80.
+
+**State at stop:** committed and pushed; tree clean.
+
+---
+
 ## 2026-07-23 — Claude Code — VISION.md + green/yellow/red tiers
 
 **Task:** owner shared a refined vision/architecture doc. Assessed it against

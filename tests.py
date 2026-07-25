@@ -363,6 +363,34 @@ def test_write_dxf_layers():
            "dashed linework moved to its own HIDDEN layer")
 
 
+def test_write_dxf_text_tiers():
+    import os
+    import tempfile
+    import ezdxf
+    import scan2cad as c
+    print("scan2cad.write_dxf - text routed to green/yellow/red layers")
+    words = [
+        {"text": "KITCHEN", "conf": 92, "cap": 8, "rotation": 0,
+         "insert": (50, 50), "x": 50, "y": 40, "w": 60, "h": 10,
+         "review": False},                                 # green -> TEXT
+        {"text": "CLObET", "conf": 55, "cap": 8, "rotation": 0,
+         "insert": (50, 90), "x": 50, "y": 80, "w": 60, "h": 10,
+         "review": False},                                 # yellow -> TEXT_CHECK
+        {"text": "8ATH", "conf": 30, "cap": 8, "rotation": 0,
+         "insert": (50, 130), "x": 50, "y": 120, "w": 60, "h": 10,
+         "review": True},                                  # red -> TEXT_REVIEW
+    ]
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "text.dxf")
+        c.write_dxf(path, 400, segments=[], curves=[], words=words)
+        by = {e.dxf.text: e.dxf.layer for e in ezdxf.readfile(path).modelspace()
+              if e.dxftype() == "TEXT"}
+        eq(by.get("KITCHEN"), "TEXT", "confident text -> green TEXT layer")
+        eq(by.get("CLObET"), "TEXT_CHECK",
+           "moderate text -> yellow TEXT_CHECK layer")
+        eq(by.get("8ATH"), "TEXT_REVIEW", "flagged text -> red TEXT_REVIEW")
+
+
 def test_corrections_apply_end_to_end():
     import os
     import tempfile
@@ -403,6 +431,7 @@ def main():
         test_corrections_dedup,
         test_estimate_lineweights,
         test_write_dxf_layers,
+        test_write_dxf_text_tiers,
         test_corrections_apply_end_to_end,
         test_enhance_faded_ocr_gate,
         test_verify_ring_gate,

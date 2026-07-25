@@ -1368,10 +1368,11 @@ def write_dxf(path, img_h, segments, curves, words, scale=1.0,
         # on its own layer by drafting convention, so a drafter can toggle it
         # independently of the solid linework
         doc.layers.add("HIDDEN", color=1)
-    doc.layers.add("TEXT", color=3)
+    doc.layers.add("TEXT", color=3)          # green: confident, minimal review
+    doc.layers.add("TEXT_CHECK", color=2)    # yellow: recommended review
     # uncertain text lives on a hidden layer: the drawing opens clean, and
     # turning TEXT_REVIEW on shows the red marks for proofreading
-    doc.layers.add("TEXT_REVIEW", color=1).off()
+    doc.layers.add("TEXT_REVIEW", color=1).off()   # red: verify by hand
     if dims:
         doc.layers.add("DIMENSIONS", color=2)
     if units_feet:
@@ -1431,9 +1432,16 @@ def write_dxf(path, img_h, segments, curves, words, scale=1.0,
             dxfattribs={"layer": "DIMENSIONS"})
         dim.render()
 
+    import provenance
+    _tier_layer = {"green": "TEXT", "yellow": "TEXT_CHECK",
+                   "red": "TEXT_REVIEW"}
     for wd in words:
         height = max(0.5 * scale, 0.72 * wd["cap"] * scale)
-        layer = "TEXT_REVIEW" if wd.get("review") else "TEXT"
+        # green / yellow / red review tier -> layer (same traffic light as the
+        # provenance sidecar). A flagged word is always red.
+        t = provenance.tier(float(wd.get("conf", 0)) / 100.0,
+                            bool(wd.get("review")))
+        layer = _tier_layer[t]
         msp.add_text(wd["text"], dxfattribs={
             "layer": layer,
             "style": "D2CAD",

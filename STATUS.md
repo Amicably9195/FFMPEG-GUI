@@ -45,7 +45,8 @@ reinterpreting it.
 
 **Text & scale:** free offline neural text reading (Tesseract + RapidOCR);
 auto-scale to real feet when dimensions agree, an honest "can't tell"
-otherwise; uncertain text isolated on a hidden red review layer.
+otherwise; text sorted onto green/yellow/red review layers (confident /
+recommended-review / hidden-and-boxed) so a drafter checks only what needs it.
 
 **Correction flywheel:** a review screen shows each uncertain label beside a
 magnified crop; a keystroke confirms or fixes it. Every fix updates the

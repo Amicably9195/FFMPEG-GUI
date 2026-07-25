@@ -11,6 +11,17 @@ Format: `YYYY-MM-DD — <engineer> — <summary>` then bullets.
 
 ## Unreleased
 
+### 2026-07-23 — Claude Code — Traffic-light text layers in the DXF
+- `write_dxf` now routes text to three layers by its review tier so the
+  green/yellow/red workflow is real in the drawing a drafter opens, not just
+  in the sidecar: **TEXT** (green, confident), **TEXT_CHECK** (yellow,
+  recommended review, visible), **TEXT_REVIEW** (red, flagged, hidden + boxed).
+  Uses the same `provenance.tier()` mapping as the sidecar — one source of
+  truth. Flagged words are always red.
+- Safe: the benchmark scores TEXT entities by string, not layer, so OCR/text
+  is byte-identical (83.3%) and the whole guardrail unchanged. `tests.py`
+  +3 → 80 (green→TEXT, yellow→TEXT_CHECK, red→TEXT_REVIEW).
+
 ### 2026-07-23 — Claude Code — VISION.md + green/yellow/red review tiers
 - `VISION.md`: adopted the refined vision/architecture doc as the canonical
   north star (compiler-pipeline framing, full input/output/module maps, the
