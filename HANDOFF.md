@@ -6,8 +6,9 @@ away, "everything a yes"). Recent Phase-B additions: line-weight estimation
 are untouched), dashed→HIDDEN layer, and `benchmark.py --hard all` robustness
 table. Default guardrail byte-identical throughout (96.7/98.9, OCR 83.3, circ
 5/6, corners 24/24, lint 0). Tree clean, pushed, 69 tests green. The remaining
-big lever is still text under degradation → GPU fine-tune (corpus tooling
-ready in `synth_text.py`).
+big lever is still text under degradation → GPU fine-tune, now with a turnkey
+runbook in **`FINETUNE.md`** (corpus tooling ready in `synth_text.py` + the
+correction flywheel).
 
 This file is overwritten at the end of every session (and at each 20–30 min
 checkpoint) with the current state, so the next engineer — Claude Code or

@@ -11,6 +11,17 @@ Format: `YYYY-MM-DD — <engineer> — <summary>` then bullets.
 
 ## Unreleased
 
+### 2026-07-23 — Claude Code — Text-tier fine-tune runbook
+- `FINETUNE.md`: a turnkey recipe for the project's one blocked lever — the
+  local reader fine-tune. Documents the PP-OCR-rec-in-PaddleOCR → ONNX path
+  (preserves RapidOCR's runtime, needs no `smart_ocr` change), how to assemble
+  the corpus from the two existing streams (`synth_text.py gen` + the
+  correction-flywheel `labels.tsv`, both already one format), the GPU step, and
+  the before/after measurement gate (`synth_text measure` + clean guardrail +
+  `--hard` stress). Deliberately a document, not an unrunnable script — a
+  training job can't be validated here, and the project ships only what it can
+  measure.
+
 ### 2026-07-23 — Claude Code — Line-weight estimation (Phase B)
 - `scan2cad.estimate_lineweights`: measures each centerline's true stroke
   width from the ink distance transform and buckets it — relative to the
