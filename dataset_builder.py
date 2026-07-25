@@ -370,7 +370,16 @@ RECIPES = {
     "faxed": ["low_dpi", "photocopy", "scanner_noise"],
     "archived_survey": ["rotate", "stain", "fold", "faded_ink"],
     "bad_light_photo": ["perspective", "shadow", "blur"],
+    # appearance-only (no geometry move): degrades scan QUALITY while leaving
+    # every pixel's coordinate put, so ground-truth geometry stays valid. Used
+    # by the hard-case benchmark tier to measure robustness without needing to
+    # transform the truth.
+    "appearance_hard": ["faded_ink", "scanner_noise", "low_dpi", "photocopy"],
 }
+
+# Recipes that move no geometry - safe to score against untransformed truth.
+APPEARANCE_ONLY = ("clean_flatbed", "old_photocopy", "faxed",
+                   "appearance_hard")
 
 
 def degrade(img, rng, recipe=None):

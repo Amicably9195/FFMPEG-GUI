@@ -1,11 +1,11 @@
 # HANDOFF — Start here
 
-**The single most important thing right now:** circle recovery just landed —
-**circles 3/6 → 5/6** and coverage 96.3% → 96.7% by re-finding columns whose
-ring touches a wall (Hough + strict `_verify_ring` gate), with a recorded 0.1%
-precision trade (DECISIONS.md #10). Tree clean, pushed, 54 tests green. Plan 0's
-circle is still missed (ring too merged for Hough) — the only remaining circle
-miss. Good next tasks below.
+**The single most important thing right now:** a hard-case benchmark stress
+tier now exists — `python benchmark.py --hard appearance_hard` — and its first
+reading is the clearest signal for what to work on next: **geometry is robust
+under heavy scan degradation (circles 5/6, coverage 94%, corners 23/24) but
+text and scale collapse (OCR 40%, scale 0/6, dashed 0/6).** Text is the lever.
+The default guardrail run is unchanged. Tree clean, pushed, 54 tests green.
 
 This file is overwritten at the end of every session (and at each 20–30 min
 checkpoint) with the current state, so the next engineer — Claude Code or
@@ -47,6 +47,10 @@ framework are committed and pushed; the tree is clean.
 - Benchmark health panel now shows per-type average confidence + review count
   (from the provenance sidecar). Honest: circle avg confidence 0.22 mirrors
   the 3/6 circle recovery.
+- Recovered wall-connected circles (3/6 → 5/6, coverage → 96.7%, recorded
+  0.1% precision trade in DECISIONS.md #10).
+- Added a hard-case stress tier: `benchmark.py --hard appearance_hard`
+  (appearance-only degradation, same ground truth). Default run unchanged.
 
 ## Do this next
 

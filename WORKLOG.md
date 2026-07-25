@@ -8,6 +8,30 @@ numbers, state at stop.
 
 ---
 
+## 2026-07-23 — Claude Code — Hard-case benchmark stress tier
+
+**Task:** the user's explicit priority — deliberately measure hard cases.
+First ruled out pushing dimension/scale (5/6): plan 4's honest scale *decline*
+is correct trustworthy behavior; forcing a lock risks a WRONG scale on a legal
+survey (doctrine forbids). So built a safe, additive robustness tier instead.
+
+**Did:** `benchmark.py --hard RECIPE` degrades each plan with a
+`dataset_builder` appearance-only recipe (no geometry move → same ground truth
+scores it); default run unchanged. Added `appearance_hard` recipe +
+`APPEARANCE_ONLY` registry to dataset_builder.
+
+**First reading (appearance_hard):** geometry robust (cover 94.1%, prec 95.5%,
+circles 5/6, corners 23/24); text/scale fragile (OCR 40%, scale 0/6, dashed
+0/6). Actionable lint 0 — graceful degradation, honest scale decline. Also
+validated the new circle recovery holds under heavy degradation.
+
+**Guardrail:** default `python benchmark.py` byte-identical (96.7/98.9, OCR
+83.3, circ 5/6, corners 24/24, lint 0). tests green.
+
+**State at stop:** committed and pushed; tree clean.
+
+---
+
 ## 2026-07-23 — Claude Code — Recover wall-connected circles (3/6 → 5/6)
 
 **Task:** the circles/arcs (3/6) opportunity, done safely with real diagnosis.

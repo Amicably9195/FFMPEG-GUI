@@ -11,6 +11,22 @@ Format: `YYYY-MM-DD — <engineer> — <summary>` then bullets.
 
 ## Unreleased
 
+### 2026-07-23 — Claude Code — Hard-case benchmark stress tier
+- `benchmark.py --hard RECIPE`: degrade every plan with a `dataset_builder`
+  appearance-only recipe (`appearance_hard`, `faxed`, `old_photocopy`) before
+  converting. Geometry isn't moved, so the same ground truth scores it. The
+  default guardrail run is byte-identical (unchanged).
+- `dataset_builder`: added the `appearance_hard` recipe
+  (faded_ink + scanner_noise + low_dpi + photocopy) and an `APPEARANCE_ONLY`
+  registry of recipes safe to score against untransformed truth.
+- **First stress-tier reading** (`appearance_hard`): geometry is robust —
+  coverage 94.1%, precision 95.5%, **circles still 5/6** (the new recovery
+  holds under heavy degradation), corners 23/24 — while **text and scale are
+  the fragile points**: OCR 40%, scale 0/6, dashed 0/6. Actionable lint stays
+  0: under stress the tool degrades gracefully and honestly declines scale
+  rather than inventing a wrong one. Confirms text as the biggest lever and
+  points future robustness work precisely.
+
 ### 2026-07-23 — Claude Code — Recover wall-connected circles (3/6 → 5/6)
 - `scan2cad`: a column whose ring touches a wall merges into one connected
   component and was dropped by the lone-component circle test. New second pass

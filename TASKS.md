@@ -103,6 +103,8 @@ _None. (When you start a task, move it here and note it in HANDOFF.md.)_
 
 ## Done (recent — full history in CHANGELOG.md)
 
+- Hard-case benchmark stress tier (`benchmark.py --hard RECIPE`) — geometry
+  robust under degradation, text/scale fragile (OCR 40%); guardrail unchanged.
 - Circles: recover wall-connected columns (`_recover_connected_circles`,
   Hough + `_verify_ring` gate) — circles 3/6 → 5/6, coverage 96.3 → 96.7%
   (recorded 0.1% precision trade, DECISIONS.md #10).

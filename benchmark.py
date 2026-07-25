@@ -309,7 +309,18 @@ def main():
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--keep", action="store_true",
                     help="keep generated files next to benchmark.py")
+    ap.add_argument("--hard", metavar="RECIPE", default=None,
+                    help="stress tier: degrade every plan with a dataset_builder "
+                         "appearance-only recipe (e.g. appearance_hard, faxed, "
+                         "old_photocopy) before converting. Geometry is not "
+                         "moved, so the same ground truth scores it. Does NOT "
+                         "change the default guardrail run.")
     args = ap.parse_args()
+    if args.hard:
+        import dataset_builder
+        if args.hard not in dataset_builder.APPEARANCE_ONLY:
+            ap.error(f"--hard recipe must be appearance-only "
+                     f"(no geometry move): {dataset_builder.APPEARANCE_ONLY}")
     rng = np.random.default_rng(args.seed)
     pyrng = random.Random(args.seed)
 
@@ -322,6 +333,9 @@ def main():
         segs, labels, dims, circles, dashes = generate_plan(pyrng)
         img, truth_px, truth_circ, truth_dash = render(
             segs, labels, rng, dirty=dirty, circles=circles, dashes=dashes)
+        if args.hard:
+            import dataset_builder
+            img, _ = dataset_builder.degrade(img, rng, recipe=args.hard)
         img_path = os.path.join(outdir, f"bench_{i}.png")
         cv2.imwrite(img_path, img)
         dxf_path = os.path.join(outdir, f"bench_{i}.dxf")
@@ -375,9 +389,10 @@ def main():
 
     def frac(a, b):
         return f"{a}/{b} ({(100.0 * a / b) if b else 0:.0f}%)"
+    tier = f"  [STRESS TIER: {args.hard}]" if args.hard else ""
     print("\n" + "=" * 44 +
-          f"\n  PROJECT HEALTH PANEL  (benchmark v{BENCHMARK_VERSION})\n"
-          + "=" * 44)
+          f"\n  PROJECT HEALTH PANEL  (benchmark v{BENCHMARK_VERSION})"
+          f"{tier}\n" + "=" * 44)
     print(f"  Line coverage      {pct(cov)}")
     print(f"  Line precision     {pct(prec)}")
     print(f"  OCR / text         {pct(txt)}")
