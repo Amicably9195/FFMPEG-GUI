@@ -8,6 +8,24 @@ numbers, state at stop.
 
 ---
 
+## 2026-07-23 — Claude Code — Top-level README
+
+**Task:** give the growing repo (13 modules + 7 coordination docs) one entry
+point for users and for interchangeable AI engineers.
+
+**Did:** wrote `README.md` — doctrine, user quick-start (→ README_Drawing2CAD),
+engineer onboarding order + prove-every-change commands, coordination-doc
+table, module map, honest can/can't. Considered chasing the circles/arcs
+dirty-scan metric (3/6) but declined: it's a geometry-threshold change with
+real false-positive regression risk I couldn't fully validate in budget —
+"never reduce benchmark quality" wins over a gamble.
+
+**Result:** docs only; `tests.py` green, benchmark untouched.
+
+**State at stop:** committed and pushed; tree clean.
+
+---
+
 ## 2026-07-23 — Claude Code — Test suite + CI gate
 
 **Task:** protect every shipped increment for interchangeable engineers — a

@@ -36,6 +36,8 @@ framework are committed and pushed; the tree is clean.
 - Added `tests.py` (37 checks, no pytest) guarding the faithfulness
   invariants, wired into CI (build `needs: test`) and WORKFLOW step 6.
   Run `python tests.py` before every push.
+- Added top-level `README.md` — the landing page for users and engineers
+  (doctrine, onboarding order, module map, coordination-doc table).
 
 ## Do this next
 

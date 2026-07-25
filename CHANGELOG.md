@@ -11,6 +11,13 @@ Format: `YYYY-MM-DD — <engineer> — <summary>` then bullets.
 
 ## Unreleased
 
+### 2026-07-23 — Claude Code — Top-level README (landing page)
+- `README.md`: single entry point orienting both users and the AI engineers —
+  the doctrine, a user quick-start (pointing at README_Drawing2CAD.md), the
+  engineer onboarding order (AI_RULES → HANDOFF → WORKFLOW → STATUS/ROADMAP),
+  the prove-every-change commands, the coordination-doc table, a full module
+  map, and the honest can/can't summary. Docs only.
+
 ### 2026-07-23 — Claude Code — Test suite guarding the faithfulness invariants
 - `tests.py`: a dependency-free regression suite (no pytest — `python
   tests.py`), 37 checks locking in the invariants the project rests on:
