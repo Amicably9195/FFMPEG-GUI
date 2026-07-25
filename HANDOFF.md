@@ -73,9 +73,16 @@ fruit is now picked** — the honest state of the remaining gaps:
   risks a wrong scale on a survey. circle 6th (plan 0) — ring too merged for
   Hough to seed. bare-feet (`23'`→`23`) — unmeasurable on this benchmark.
 - **Still genuinely open + safe:** a Phase-B deterministic feature with its own
-  new benchmark metric (title-block extraction, line-weight estimation,
-  automatic layer inference); more high-precision `verify.py` checks; wiring
-  the curated dataset fetchers (P0, needs network).
+  new benchmark metric (title-block extraction, line-weight estimation, more
+  automatic layer inference beyond the HIDDEN layer already added); more
+  high-precision `verify.py` checks; wiring the curated dataset fetchers (P0,
+  needs network).
+- **Investigated, working-as-intended (do NOT "fix"):** `benchmark.py --hard
+  old_photocopy` shows 6 *actionable* lint findings, all `open_polygon`. These
+  are legitimate — `open_polygon` requires an angle >20° (collinear breaks are
+  excluded), so they are real near-miss corners the photocopy broke, correctly
+  flagged for human review. Clean input stays 0. The lint is honest under
+  degradation, not a false-positive bug.
 - **P0 (blocked here):** wire curated fetchers + real regression suite —
   needs network + per-source license confirmation. Each fetcher must land in
   `dataset_builder.fetch`, never as an ad-hoc scrape.
