@@ -8,6 +8,31 @@ numbers, state at stop.
 
 ---
 
+## 2026-07-23 — Claude Code — Text tier: synthetic corpus + reader baseline
+
+**Task:** TASKS.md P1 — text-tier synthetic pre-training. Training is
+GPU-gated; the unblocked increment is the data generator + a measured
+baseline of the current reader on drafting text.
+
+**Did:** wrote `synth_text.py` — synthetic drafting-text generator
+(dimensions/room names/notes, drafting fonts, `dataset_builder` degradation
+recipes). `gen` writes pairs via `corrections.save_pair` (identical flywheel
+format). `measure` scores the current reader (exact-match + Levenshtein char
+accuracy). Reused smart_ocr / pytesseract; no pipeline code touched.
+
+**Measured (new baseline, repeatable):** on synthetic drafting text —
+RapidOCR 88.3% exact / 97.2% char; Tesseract 73.3% / 93.5%. Misses are
+dominated by dropped feet/inch tick marks (`7'-0"` → `7-0`).
+
+**Numeric plan benchmark:** unaffected (standalone tool) — 96.3% / 99.0% /
+24-24.
+
+**State at stop:** committed and pushed; tree clean. Next: either scale the
+corpus + run the GPU fine-tune (GPU-gated), or attack the tick-mark weakness
+in reader post-processing (unblocked).
+
+---
+
 ## 2026-07-23 — Claude Code — Lint: open-polygon + impossible-intersection
 
 **Task:** TASKS.md P2 — extend `verify.py` with two deterministic checks.

@@ -1,12 +1,11 @@
 # HANDOFF — Start here
 
-**The single most important thing right now:** the dataset infrastructure
-*framework* and *synthetic pipeline* are built (`dataset_builder.py`) and the
-lint pass now has open-polygon + impossible-intersection checks. What remains
-of the P0 dataset work — wiring real curated downloaders and a real-drawing
-regression suite — is **network-gated and blocked in this sandbox**. The next
-unblocked task is **P1 in TASKS.md: text-tier synthetic pre-training**, which
-can now use `dataset_builder.synth` / the degradation library.
+**The single most important thing right now:** the text-tier data generator
+`synth_text.py` is built, and it gives a measured reader baseline on drafting
+text — **RapidOCR 88.3% exact / 97.2% char**, misses dominated by dropped
+feet/inch tick marks. The next unblocked task is **P1 in TASKS.md: fix the
+dropped tick marks** in `smart_ocr` post-processing (no GPU needed) — the
+cheapest large text win, measurable with `synth_text.py measure`.
 
 This file is overwritten at the end of every session (and at each 20–30 min
 checkpoint) with the current state, so the next engineer — Claude Code or
@@ -24,29 +23,30 @@ framework are committed and pushed; the tree is clean.
 
 - Built the multi-AI coordination layer (AI_RULES / WORKFLOW / TASKS /
   CHANGELOG / DECISIONS / WORKLOG / HANDOFF).
-- Built `dataset_builder.py`: curated approved-source registry (never-scrape),
-  11-category benchmark suite, synthetic degradation library (12 degradations
-  → 7 real-world recipes), ground-truth-preserving synthetic generation
-  (reuses `benchmark.py`), per-sample metadata, content-hash train/val/bench
-  split with dedup, CLI (init/sources/synth/degrade/fetch/split/stats).
-  Tested end-to-end in scratchpad. Numeric benchmark unaffected.
+- Built `dataset_builder.py`: curated registry (never-scrape), 11-category
+  suite, synthetic degradation library (12 degradations → 7 recipes),
+  ground-truth synthetic generation, split + dedup, CLI.
+- Added `open_polygon` + `impossible_intersection` lint checks to `verify.py`
+  (high-precision; actionable stays 0).
+- Built `synth_text.py`: synthetic drafting-text corpus in flywheel format +
+  a measured reader baseline (RapidOCR 88.3% exact / 97.2% char). Misses are
+  dropped feet/inch tick marks.
 
 ## Do this next
 
-Run the standard session in `WORKFLOW.md` (pull → read AI_RULES → this file →
-STATUS → TASKS → WORKLOG → baseline benchmark), then pick the highest-priority
+Run the standard session in `WORKFLOW.md`, then pick the highest-priority
 *unblocked* task:
 
+- **P1 (unblocked, best next increment):** fix dropped feet/inch tick marks
+  in `smart_ocr` post-processing (dimension-aware `'`/`"` reconstruction).
+  Measure before/after with `python synth_text.py measure` (baseline: 88.3%
+  exact). No GPU.
 - **P0 (blocked here):** wire curated fetchers + real regression suite —
-  needs network + per-source license confirmation. Do this on a connected
-  machine. Each fetcher must land inside `dataset_builder.fetch` (the single
-  sanctioned entry point), never as an ad-hoc scrape.
-- **P1 (unblocked, good next increment):** text-tier synthetic pre-training —
-  generate training data locally via `dataset_builder.synth` / the
-  degradation library, then pre-train/adapt the local reader. Target: OCR
-  accuracy (now 80%).
-- **P2 (unblocked):** text-tier fine-tune needs collected corrections + a GPU
-  (blocked here). Deeper deterministic geometry (P3) is fully unblocked.
+  needs network + per-source license confirmation. Each fetcher must land in
+  `dataset_builder.fetch`, never as an ad-hoc scrape.
+- **P2 (blocked here):** the synthetic-corpus fine-tune needs a GPU —
+  `synth_text.py gen -n <large>` then train. Deeper deterministic geometry
+  (P3) is fully unblocked if you want a non-text increment.
 
 ## Using dataset_builder.py
 

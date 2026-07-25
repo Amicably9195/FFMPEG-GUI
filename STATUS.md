@@ -94,10 +94,14 @@ a typical machine:
 ## What's next (priority order)
 
 1. **Text tier — the biggest lever.** Reading is the ceiling on everything
-   now; most remaining misses trace back to it. Two steps: synthetic
-   pre-training (free), then fine-tune the local reader on the
-   correction-flywheel data (**one-time GPU**, after a few hundred labeled
-   examples are collected).
+   now; most remaining misses trace back to it. A measured baseline exists:
+   on synthetic drafting text (`python synth_text.py measure`) the neural
+   reader scores **88.3% exact / 97.2% char**, and the dominant miss is
+   *dropped feet/inch tick marks* (`7'-0"` → `7-0`) — a specific, fixable
+   weakness. Path: (a) dimension-aware tick reconstruction in post-processing
+   (free, next), then (b) synthetic pre-training + fine-tune the local reader
+   on the correction-flywheel data (**one-time GPU**). `synth_text.py`
+   generates unlimited labeled pairs in the flywheel format for both.
 2. **Verification / lint** *(first pass shipped).* `verify.py` flags doubled
    walls (duplicate geometry), dimensions that disagree with their own drawn
    length, and long lines floating free — advisory only, never auto-fixed,

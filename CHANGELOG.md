@@ -11,6 +11,23 @@ Format: `YYYY-MM-DD — <engineer> — <summary>` then bullets.
 
 ## Unreleased
 
+### 2026-07-23 — Claude Code — Text tier: synthetic corpus + reader baseline
+- `synth_text.py` (Phase C, Stage 1 — TASKS.md P1): unlimited synthetic
+  drafting text (dimensions, room names, notes, callouts) in drafting-style
+  fonts, put through the same degradation recipes real scans suffer.
+  - `gen` writes labeled (crop → text) pairs in the EXACT flywheel format
+    (`corrections.save_pair`), so synthetic pre-training data and real user
+    corrections share one pipeline.
+  - `measure` scores the current reader on fresh synthetic crops — turns
+    "text is the ceiling" into a repeatable number, no training/GPU needed.
+- **Measured reader baseline on synthetic drafting text** (new, repeatable):
+  - RapidOCR (neural, what the app uses): **88.3% exact / 97.2% char**.
+  - Tesseract: 73.3% exact / 93.5% char.
+  - Dominant failure mode: dropped feet/inch tick marks (`7'-0"` → `7-0`) —
+    a specific, fixable weakness the fine-tune targets.
+- Standalone tool; numeric plan benchmark unaffected (coverage 96.3%,
+  precision 99.0%, corners 24/24).
+
 ### 2026-07-23 — Claude Code — Lint: open-polygon + impossible-intersection
 - `verify.py` gains two deterministic checks (TASKS.md P2):
   - `open_polygon` — two long walls whose free ends nearly meet at a corner

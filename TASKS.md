@@ -39,14 +39,27 @@ _None. (When you start a task, move it here and note it in HANDOFF.md.)_
   (today: synthetic plans only).
 - **Rule:** curated + synthetic only. **Never scrape the open web.**
 
-### P1 — Text tier: synthetic pre-training
-- **Why:** Reading is the biggest lever; most remaining misses are text.
-- **Scope:** generate large synthetic training sets from CAD renders (varied
-  fonts, dimension styles, rotation, skew, degradation) and pre-train / adapt
-  the local reader before any human labeling.
-- **Dependencies:** P0 synthetic degradation library.
-- **Effort:** multi-session; free (CPU generation, modest training).
-- **Benchmark affected:** OCR / text accuracy (currently 80%).
+### P1 — Text tier: fix dropped feet/inch tick marks (unblocked)
+- **Why:** the measured reader baseline (`synth_text.py measure`) shows the
+  dominant drafting-text miss is dropped `'` and `"` on dimensions
+  (`7'-0"` → `7-0`). RapidOCR is 88.3% exact / 97.2% char on synthetic
+  drafting text; closing the tick-mark gap is the cheapest large win.
+- **Scope:** targeted post-processing in `smart_ocr` — when a read looks like
+  a dimension (digits + `-`), reconstruct the feet/inch marks from geometry
+  or a dimension grammar; measure with `synth_text.py measure`.
+- **Dependencies:** none (`synth_text.py` shipped; no GPU needed).
+- **Effort:** <1 session.
+- **Benchmark affected:** OCR / text accuracy (plan benchmark 80%; synthetic
+  drafting-text exact 88.3%).
+
+### P2 — Text tier: run the synthetic pre-training fine-tune
+- **Why:** the corpus generator exists; scaling it + a one-time fine-tune is
+  the deeper win on hand/degraded lettering.
+- **Scope:** `synth_text.py gen -n <large>` → fine-tune the local recognizer
+  → ship the improved model; re-measure.
+- **Dependencies:** a GPU (one-time). **Blocked in this sandbox.**
+- **Effort:** one focused session on a GPU host.
+- **Benchmark affected:** OCR / text accuracy, especially degraded lettering.
 
 ### P1 — Real DWG round-trip test
 - **Why:** DWG/DGN paths are written to the ODA/LibreDWG CLIs but unverified
@@ -89,6 +102,8 @@ _None. (When you start a task, move it here and note it in HANDOFF.md.)_
 
 ## Done (recent — full history in CHANGELOG.md)
 
+- Text tier: `synth_text.py` — synthetic drafting-text corpus (flywheel
+  format) + measured reader baseline (RapidOCR 88.3% exact / 97.2% char).
 - Lint: `open_polygon` + `impossible_intersection` checks in `verify.py`,
   high-precision (benchmark actionable stays 0).
 - Dataset infrastructure framework: `dataset_builder.py` — approved-source
