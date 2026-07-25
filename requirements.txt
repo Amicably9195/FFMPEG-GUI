@@ -1,0 +1,32 @@
+# Drawing2CAD runtime dependencies.
+#
+# IMPORTANT — OpenCV must be the *contrib* build. RapidOCR pulls in plain
+# opencv-python as a dependency, which OVERWRITES the contrib build and breaks
+# ximgproc (the centerline thinning the vectorizer relies on). So install in
+# this order:
+#
+#     pip install -r requirements.txt
+#     pip uninstall -y opencv-python opencv-python-headless
+#     pip install --force-reinstall --no-deps opencv-contrib-python-headless
+#
+# i.e. always let opencv-contrib-python-headless win LAST. (The CI workflow and
+# README document the same dance.)
+
+numpy>=1.24
+ezdxf>=1.1
+pytesseract>=0.3.10
+pillow>=10.0
+pymupdf>=1.23
+rapidocr_onnxruntime>=1.3
+opencv-contrib-python-headless>=4.8
+
+# GUI only (headless conversion via scan2cad.py / benchmark.py does not need
+# these; the desktop app drawing2cad_gui.py does):
+customtkinter>=5.2
+tkinterdnd2>=0.3
+
+# Tests and the benchmark need only: numpy, ezdxf, pytesseract, pillow, and
+# opencv-contrib-python-headless. Run:  python tests.py  &&  python benchmark.py
+#
+# OCR also needs the Tesseract *engine* installed on the system
+# (apt install tesseract-ocr / brew install tesseract / UB-Mannheim on Windows).

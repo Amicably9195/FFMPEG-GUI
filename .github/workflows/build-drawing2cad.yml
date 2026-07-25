@@ -19,6 +19,8 @@ jobs:
         run: |
           pip install numpy ezdxf pytesseract pillow
           pip install --no-deps opencv-contrib-python-headless
+          # tests.py + benchmark.py need only the above; see requirements.txt
+          # for the full runtime set and the opencv-contrib install order.
 
       - name: Run tests
         run: python tests.py

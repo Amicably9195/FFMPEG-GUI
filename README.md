@@ -20,11 +20,12 @@ results.
 
 Quick start:
 ```
-pip install customtkinter tkinterdnd2 numpy ezdxf pytesseract pillow pymupdf rapidocr_onnxruntime
+pip install -r requirements.txt
 pip uninstall -y opencv-python opencv-python-headless
 pip install --force-reinstall --no-deps opencv-contrib-python-headless   # contrib LAST — RapidOCR clobbers it otherwise
 python drawing2cad_gui.py
 ```
+See `requirements.txt` for why the opencv-contrib step is separate.
 
 ---
 
