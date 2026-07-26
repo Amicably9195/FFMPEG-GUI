@@ -177,6 +177,17 @@ def test_verify_ring_gate():
 # dataset_builder - split determinism, dedup, json safety
 # --------------------------------------------------------------------------
 
+def test_dataset_loc_fetcher_wired():
+    import dataset_builder as d
+    print("dataset_builder - LoC public-domain downloader is wired")
+    src = d.APPROVED_SOURCES["loc_habs_haer"]
+    check("fetch" in src and callable(src["fetch"]),
+          "approved LoC source has a fetch callable")
+    check("public domain" in src["license"].lower(),
+          "LoC source is recorded as public domain")
+    check(hasattr(d, "fetch_loc"), "fetch_loc() download function exists")
+
+
 def test_dataset_split_deterministic():
     import dataset_builder as d
     print("dataset_builder split + dedup")
@@ -534,6 +545,7 @@ def main():
         test_corrections_apply_end_to_end,
         test_enhance_faded_ocr_gate,
         test_verify_ring_gate,
+        test_dataset_loc_fetcher_wired,
         test_dataset_split_deterministic,
         test_dataset_degrade_records,
         test_dataset_jsonable,

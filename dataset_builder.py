@@ -207,6 +207,103 @@ def fetch(source_id=None):
 
 
 # --------------------------------------------------------------------------
+# Real downloaders for approved public-domain sources
+# --------------------------------------------------------------------------
+# Network-gated: these run on a CONNECTED machine (the dev sandbox has no
+# network). Stdlib only (urllib - no extra dependency); polite (a descriptive
+# User-Agent, rate-limited, capped); and they pull ONLY from the named
+# public-domain collection via its official API, recording per-file license
+# and provenance. This is curated fetch (DECISIONS.md #7), never a scrape.
+#
+# NOTE: the Library of Congress JSON shape (results[].image_url) matches the
+# documented API; confirm on the first live run and adjust the two marked
+# lines if LoC changes it.
+
+import time as _time
+import urllib.request as _ureq
+
+_UA = ("Drawing2CAD-dataset-builder/1.0 "
+       "(personal research; public-domain Library of Congress content)")
+
+
+def _http_json(url, timeout=30):
+    req = _ureq.Request(url, headers={"User-Agent": _UA,
+                                      "Accept": "application/json"})
+    with _ureq.urlopen(req, timeout=timeout) as r:
+        return json.load(r)
+
+
+def _download(url, path, timeout=60):
+    req = _ureq.Request(url, headers={"User-Agent": _UA})
+    with _ureq.urlopen(req, timeout=timeout) as r, open(path, "wb") as f:
+        f.write(r.read())
+
+
+def fetch_loc(root, collection="historic-american-buildings-survey",
+              category="architectural", count=25, delay=2.0):
+    """Download measured drawings from a Library of Congress collection via its
+    public JSON API. US Government work - public domain. Polite and capped.
+
+    collection examples: 'historic-american-buildings-survey' (HABS),
+    'historic-american-engineering-record' (HAER)."""
+    init_tree()
+    raw = os.path.join(root, category, "raw")
+    meta = os.path.join(root, category, "meta")
+    got, page = 0, 1
+    while got < count:
+        api = (f"https://www.loc.gov/collections/{collection}/"
+               f"?fo=json&at=results&c=25&sp={page}"
+               f"&fa=online-format:image")
+        try:
+            data = _http_json(api)
+        except Exception as e:
+            print(f"  LoC page {page} failed ({e}) - stopping.")
+            break
+        results = data.get("results") or []         # <-- confirm shape
+        if not results:
+            break
+        for item in results:
+            if got >= count:
+                break
+            urls = item.get("image_url") or []       # <-- confirm shape
+            if not urls:
+                continue
+            img_url = urls[-1]                        # largest offered
+            if img_url.startswith("//"):
+                img_url = "https:" + img_url
+            name = f"loc_{collection[:10]}_{got:04d}.jpg"
+            try:
+                _download(img_url, os.path.join(raw, name))
+            except Exception as e:
+                print(f"  skip {name}: {e}")
+                continue
+            rec = {"source": "loc_habs_haer",
+                   "license": "US Government work - public domain",
+                   "collection": collection,
+                   "loc_url": item.get("id") or item.get("url"),
+                   "title": (item.get("title") or "")[:200],
+                   "image_url": img_url, "category": category,
+                   "created": _now()}
+            with open(os.path.join(meta, name + ".json"), "w") as f:
+                json.dump(_jsonable(rec), f, indent=2)
+            got += 1
+            print(f"  [{got}/{count}] {name}")
+            _time.sleep(delay)                        # be kind to the API
+        page += 1
+    print(f"  LoC: downloaded {got} drawing(s) into {raw}")
+    return got
+
+
+def _fetch_loc_habs(root):
+    return fetch_loc(root, "historic-american-buildings-survey",
+                     "architectural", count=25)
+
+
+# attach the wired downloader to its approved-source entry
+APPROVED_SOURCES["loc_habs_haer"]["fetch"] = _fetch_loc_habs
+
+
+# --------------------------------------------------------------------------
 # Synthetic degradation library - fully local, the core of the corpus
 # --------------------------------------------------------------------------
 # Each degradation takes (img_gray, rng, **p) -> img_gray and returns a
