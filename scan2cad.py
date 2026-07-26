@@ -1777,8 +1777,10 @@ def convert(input_path, output_path=None, *,
             log(f"No CAD converter found - saved DXF instead "
                 f"(opens in AutoCAD & MicroStation): {output_path}")
     return dict(output=output_path, lines=n_lines, curves=len(curves),
-                words=len(words), review=n_review, scale=scale,
-                units="feet" if units_feet else "pixels", size=gray.shape)
+                dimensions=len(dim_pairs), circles=len(rounds),
+                dashed=int(len(dashed)), words=len(words), review=n_review,
+                scale=scale, units="feet" if units_feet else "pixels",
+                size=gray.shape)
 
 
 def render_preview(dxf_path, png_path, dpi=150):
@@ -1840,7 +1842,7 @@ def main():
                     help="also render a PNG preview of the DXF")
     args = ap.parse_args()
 
-    convert(args.input, args.output,
+    st = convert(args.input, args.output,
             scale=args.scale,
             do_page_crop=not args.no_crop,
             do_deskew=not args.no_deskew,
@@ -1857,6 +1859,13 @@ def main():
             review_conf=args.review_conf,
             min_line_px=args.min_line,
             speck_px=args.speck)
+    if st:
+        scl = (f"scale locked ({st['scale']:.5f} ft/px)"
+               if st["units"] == "feet" else "scale not locked (pixel units)")
+        print(f"\nSummary: {st['lines']} lines, {st['dimensions']} dimensions, "
+              f"{st['circles']} circles/arcs, {st['dashed']} dashed, "
+              f"{st['words']} text; {scl}; "
+              f"{st['review']} item(s) flagged for review.")
     if args.preview:
         render_preview(args.output or
                        os.path.splitext(args.input)[0] + ".dxf", args.preview)

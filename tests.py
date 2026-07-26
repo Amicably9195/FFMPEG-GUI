@@ -400,6 +400,25 @@ def test_svg_export():
               "background embedded as a faint overlay image")
 
 
+def test_convert_stats_summary():
+    import os
+    import tempfile
+    import scan2cad
+    print("convert() - returns an enriched summary dict")
+    img = np.full((160, 220), 255, np.uint8)
+    cv2.rectangle(img, (30, 30), (190, 130), 0, 3)
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "s.png")
+        cv2.imwrite(p, img)
+        st = scan2cad.convert(p, os.path.join(d, "s.dxf"), do_page_crop=False,
+                              do_deskew=False, do_ocr=False, log=lambda m: None)
+        for k in ("lines", "curves", "dimensions", "circles", "dashed",
+                  "words", "review", "scale", "units"):
+            check(k in st, f"summary has '{k}'")
+        check(isinstance(st["dimensions"], int) and st["dimensions"] >= 0,
+              "dimensions is a count")
+
+
 def test_convert_svg_out_end_to_end():
     import os
     import tempfile
@@ -492,6 +511,7 @@ def main():
         test_write_dxf_layers,
         test_write_dxf_text_tiers,
         test_svg_export,
+        test_convert_stats_summary,
         test_convert_svg_out_end_to_end,
         test_corrections_apply_end_to_end,
         test_enhance_faded_ocr_gate,
