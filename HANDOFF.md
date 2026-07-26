@@ -1,14 +1,16 @@
 # HANDOFF — Start here
 
-**The single most important thing right now:** working autonomously (owner
-away, "everything a yes"). Recent Phase-B additions: line-weight estimation
-(`estimate_lineweights` — bold walls vs fine lines, gated so uniform drawings
-are untouched), dashed→HIDDEN layer, and `benchmark.py --hard all` robustness
-table. Default guardrail byte-identical throughout (96.7/98.9, OCR 83.3, circ
-5/6, corners 24/24, lint 0). Tree clean, pushed, 69 tests green. The remaining
-big lever is still text under degradation → GPU fine-tune, now with a turnkey
-runbook in **`FINETUNE.md`** (corpus tooling ready in `synth_text.py` + the
-correction flywheel).
+**The single most important thing right now:** the owner adopted a refined
+vision doc (now `VISION.md`) and its concrete mechanisms are all shipped:
+green/yellow/red review tiers (provenance sidecar + DXF layers TEXT /
+TEXT_CHECK / TEXT_REVIEW + SVG colours), plus SVG preview export (`--svg`) with
+dimensions and a **verification overlay** (source image faint under the
+recovered vectors, roadmap Phase E). Also this run: line-weight estimation,
+dashed→HIDDEN layer, `--hard all` robustness table, `FINETUNE.md` runbook, and
+an enriched `convert()` summary + CLI one-liner. Default guardrail
+byte-identical throughout (96.7/98.9, OCR 83.3, circ 5/6, corners 24/24, lint
+0). Tree clean, pushed, **98 tests green**. The one remaining big lever is text
+under degradation → GPU fine-tune (turnkey in `FINETUNE.md`).
 
 This file is overwritten at the end of every session (and at each 20–30 min
 checkpoint) with the current state, so the next engineer — Claude Code or
