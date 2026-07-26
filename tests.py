@@ -363,6 +363,33 @@ def test_write_dxf_layers():
            "dashed linework moved to its own HIDDEN layer")
 
 
+def test_svg_export():
+    import os
+    import tempfile
+    import xml.etree.ElementTree as ET
+    import svg_export
+    print("svg_export.write_svg - valid SVG, tier-coloured text")
+    words = [{"text": "KITCHEN", "conf": 92, "cap": 8, "rotation": 0,
+              "insert": (50, 50), "review": False},           # green
+             {"text": "8ATH", "conf": 30, "cap": 8, "rotation": 90,
+              "insert": (80, 120), "review": True}]            # red
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "t.svg")
+        svg_export.write_svg(p, 400, 300, segments=[(10, 10, 200, 10)],
+                             curves=[], words=words,
+                             rounds=[("circle", 100, 100, 20, 0.9)],
+                             dashed=[(10, 50, 200, 50)])
+        root = ET.parse(p).getroot()          # must be valid XML
+        tags = [e.tag.split("}")[-1] for e in root]
+        check(tags.count("line") == 2, "solid + dashed lines emitted")
+        check(tags.count("circle") == 1, "circle emitted")
+        texts = {e.text: e.get("fill") for e in root if e.tag.endswith("text")}
+        eq(texts.get("KITCHEN"), svg_export._TIER_FILL["green"],
+           "confident text drawn green")
+        eq(texts.get("8ATH"), svg_export._TIER_FILL["red"],
+           "flagged text drawn red")
+
+
 def test_write_dxf_text_tiers():
     import os
     import tempfile
@@ -432,6 +459,7 @@ def main():
         test_estimate_lineweights,
         test_write_dxf_layers,
         test_write_dxf_text_tiers,
+        test_svg_export,
         test_corrections_apply_end_to_end,
         test_enhance_faded_ocr_gate,
         test_verify_ring_gate,

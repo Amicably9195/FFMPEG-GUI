@@ -1475,6 +1475,7 @@ def convert(input_path, output_path=None, *,
             smart_read=True,
             review_out=False,
             do_verify=True,
+            svg_out=False,
             review_conf=70,
             min_line_px=6.0,
             speck_px=8,
@@ -1711,6 +1712,18 @@ def convert(input_path, output_path=None, *,
     log(f"Wrote {output_path}  ({n_lines} lines, {len(dashed)} dashed, "
         f"{len(curves)} polylines, {len(rounds)} circles/arcs, "
         f"{len(dim_pairs)} dimensions, {len(words)} text entities)")
+    if svg_out:
+        # a browser-viewable preview of the same recovered geometry
+        try:
+            import svg_export
+            svg_path = os.path.splitext(output_path)[0] + ".svg"
+            svg_export.write_svg(svg_path, gray.shape[1], gray.shape[0],
+                                 segments=segs, curves=curves, words=words,
+                                 rounds=rounds, dashed=dashed,
+                                 min_len_px=min_line_px)
+            log(f"Wrote SVG preview {svg_path}")
+        except Exception as exc:
+            log(f"(SVG preview skipped: {exc})")
     if review_out:
         # sidecar for the review/correction screen (Phase C data flywheel)
         try:
@@ -1813,6 +1826,8 @@ def main():
     ap.add_argument("--review", action="store_true",
                     help="write a .review.json sidecar for the text "
                          "correction screen (python review_gui.py ...)")
+    ap.add_argument("--svg", action="store_true",
+                    help="also write a browser-viewable .svg preview")
     ap.add_argument("--no-verify", action="store_true",
                     help="skip the drawing-lint pass (.lint.json)")
     ap.add_argument("--review-conf", type=float, default=70,
@@ -1838,6 +1853,7 @@ def main():
             smart_read=not args.no_smart,
             review_out=args.review,
             do_verify=not args.no_verify,
+            svg_out=args.svg,
             review_conf=args.review_conf,
             min_line_px=args.min_line,
             speck_px=args.speck)

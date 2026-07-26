@@ -81,6 +81,8 @@ build.
   dimension tick reconstruction; only overrides Tesseract when clearly better.
 - `cad_io.py` — DWG/DGN in and out via a detected converter (ODA / LibreDWG),
   graceful DXF fallback.
+- `svg_export.py` — optional browser-viewable `.svg` preview of the recovered
+  geometry (`--svg`), text coloured by review tier.
 - `drawing2cad_gui.py` — the desktop GUI.
 
 **Trust & review**

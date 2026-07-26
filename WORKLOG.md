@@ -8,6 +8,22 @@ numbers, state at stop.
 
 ---
 
+## 2026-07-23 — Claude Code — SVG preview export
+
+**Task:** the vision doc's optional SVG output — a browser-viewable check.
+
+**Did:** `svg_export.py` (own module, per the modular architecture) draws the
+same recovered entities in source-pixel space; text coloured by G/Y/R tier,
+arcs sampled as polylines. Wired `svg_out` into `convert` + a `--svg` flag;
+added to the PyInstaller spec.
+
+**Safe:** separate output path, DXF pipeline untouched, guardrail unchanged.
+tests +4 → 84 (valid XML, tier colours, line/circle emission).
+
+**State at stop:** committed and pushed; tree clean.
+
+---
+
 ## 2026-07-23 — Claude Code — Traffic-light text layers
 
 **Task:** make the G/Y/R tiers real in the DXF, not just the sidecar.

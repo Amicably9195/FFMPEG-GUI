@@ -158,11 +158,12 @@ dashed→HIDDEN layer; editable DIMENSION entities; junction healing;
 line-weight estimation; auto-scale to feet with honest decline; free offline
 OCR (Tesseract+RapidOCR) with dimension tick reconstruction; layered output;
 verification lint (advisory, high-precision); confidence + provenance;
-correction flywheel; a versioned benchmark with a `--hard` robustness tier.
+correction flywheel; green/yellow/red review tiers (sidecar, DXF layers, SVG);
+an optional SVG preview export; a versioned benchmark + `--hard` robustness tier.
 
 **Planned / deferred (aspirational above):** the AI-assisted semantic tier
 (wall/door/window/stair/symbol recognition, room-boundary inference); the
-constraint solver; title-block metadata extraction; SVG output;
+constraint solver; title-block metadata extraction;
 perspective-correction hardening; the local reader fine-tune (see
 `FINETUNE.md`, needs a one-time GPU). These are targets, not current
 capabilities — deterministic-first means they arrive only where they beat

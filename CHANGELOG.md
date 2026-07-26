@@ -11,6 +11,16 @@ Format: `YYYY-MM-DD — <engineer> — <summary>` then bullets.
 
 ## Unreleased
 
+### 2026-07-23 — Claude Code — SVG preview export
+- `svg_export.py` (new modular engine) + `convert(..., svg_out=True)` and a
+  `--svg` CLI flag: write a browser-viewable `.svg` of the SAME recovered
+  geometry the DXF gets (lines, dashed/hidden, circles, arcs, curves, text) —
+  a quick visual check that needs no CAD software. Text is coloured by the
+  green/yellow/red review tier (via `provenance.tier`), roles by colour.
+- Additive and safe: separate output path, does not touch the DXF pipeline;
+  guardrail unchanged. `tests.py` +4 → 84 (valid XML, tier-coloured text,
+  line/circle emission). Added to the PyInstaller spec.
+
 ### 2026-07-23 — Claude Code — Traffic-light text layers in the DXF
 - `write_dxf` now routes text to three layers by its review tier so the
   green/yellow/red workflow is real in the drawing a drafter opens, not just
