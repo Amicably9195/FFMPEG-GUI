@@ -239,13 +239,15 @@ def _download(url, path, timeout=60):
         f.write(r.read())
 
 
-def fetch_loc(root, collection="historic-american-buildings-survey",
+def fetch_loc(root,
+              collection="historic-american-buildings-landscapes-and-engineering-records",
               category="architectural", count=25, delay=2.0):
     """Download measured drawings from a Library of Congress collection via its
     public JSON API. US Government work - public domain. Polite and capped.
 
-    collection examples: 'historic-american-buildings-survey' (HABS),
-    'historic-american-engineering-record' (HAER)."""
+    The default is the COMBINED HABS/HAER/HALS collection slug, confirmed
+    working against the live API. (The older per-survey slugs like
+    'historic-american-buildings-survey' now 404.)"""
     init_tree()
     raw = os.path.join(root, category, "raw")
     meta = os.path.join(root, category, "meta")
@@ -295,7 +297,8 @@ def fetch_loc(root, collection="historic-american-buildings-survey",
 
 
 def _fetch_loc_habs(root):
-    return fetch_loc(root, "historic-american-buildings-survey",
+    return fetch_loc(root,
+                     "historic-american-buildings-landscapes-and-engineering-records",
                      "architectural", count=25)
 
 

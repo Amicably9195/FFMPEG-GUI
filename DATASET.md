@@ -24,16 +24,18 @@ python dataset_builder.py fetch --source loc_habs_haer
 Or call it directly for control:
 ```python
 import dataset_builder as d
-d.fetch_loc(d.ROOT,
-            collection="historic-american-engineering-record",  # HAER
-            category="surveys", count=40)
+d.fetch_loc(d.ROOT, category="surveys", count=40)
 ```
 
 ### B. PowerShell (Windows)
 ```powershell
 scripts\fetch_loc_drawings.ps1 -Count 40
-scripts\fetch_loc_drawings.ps1 -Collection historic-american-engineering-record
 ```
+
+> **Collection slug:** the default is the combined
+> `historic-american-buildings-landscapes-and-engineering-records` (HABS +
+> HAER + HALS), confirmed working against the live LoC JSON API. The older
+> per-survey slugs (e.g. `historic-american-buildings-survey`) now return 404.
 
 ## After downloading
 ```

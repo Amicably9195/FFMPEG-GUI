@@ -15,7 +15,6 @@
 
 .EXAMPLE
   ./fetch_loc_drawings.ps1 -Count 40
-  ./fetch_loc_drawings.ps1 -Collection historic-american-engineering-record
 
 .NOTES
   Requires PowerShell 5+ (Windows 10/11 built-in). Respect the LoC's terms;
@@ -23,7 +22,9 @@
 #>
 param(
   [int]$Count = 25,
-  [string]$Collection = "historic-american-buildings-survey",
+  # Combined HABS/HAER/HALS collection slug (confirmed working against the live
+  # LoC JSON API; the older per-survey slugs 404).
+  [string]$Collection = "historic-american-buildings-landscapes-and-engineering-records",
   [string]$OutDir = "$env:USERPROFILE\.drawing2cad_dataset\architectural",
   [double]$DelaySeconds = 2.0
 )
@@ -57,7 +58,7 @@ while ($got -lt $Count) {
     try {
       Invoke-WebRequest -Uri $img -Headers @{ "User-Agent" = $ua } -OutFile $imgPath -TimeoutSec 60
     } catch {
-      Write-Warning "skip ${name}: $_"
+      Write-Warning ("skip {0}: {1}" -f $name, $_)   # -f avoids the $name: parse trap
       continue
     }
 
