@@ -1547,6 +1547,17 @@ def convert(input_path, output_path=None, *,
         log(f"Large scan ({_long}px) downscaled to {max(gray.shape[:2])}px "
             f"for speed (linework detail preserved).")
 
+    # Is this a line drawing or a continuous-tone image (e.g. a building
+    # PHOTO)? A measured drawing is mostly white paper with thin dark lines;
+    # a photograph has broad midtones. Warn but never block (never lose
+    # information) - the user gets to see the honest assessment.
+    white_frac = float((gray > 200).mean())
+    looks_like_drawing = white_frac >= 0.45
+    if not looks_like_drawing:
+        log(f"Note: {(1 - white_frac) * 100:.0f}% of this image is non-white - "
+            f"it looks more like a photograph or continuous-tone image than a "
+            f"line drawing, so vector output will be poor. Converting anyway.")
+
     if do_page_crop:
         quad = find_page_quad(gray)
         warped = warp_to_page(gray, quad) if quad is not None else None
@@ -1808,7 +1819,8 @@ def convert(input_path, output_path=None, *,
                 dimensions=len(dim_pairs), circles=len(rounds),
                 dashed=int(len(dashed)), words=len(words), review=n_review,
                 scale=scale, units="feet" if units_feet else "pixels",
-                missed_fraction=missed_fraction, size=gray.shape)
+                missed_fraction=missed_fraction,
+                looks_like_drawing=looks_like_drawing, size=gray.shape)
 
 
 def render_preview(dxf_path, png_path, dpi=150):

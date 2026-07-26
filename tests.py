@@ -454,6 +454,18 @@ def test_convert_downscales_huge_scans():
                                do_page_crop=False, do_deskew=False,
                                do_ocr=False, log=lambda m: None)
         eq(max(st2["size"]), 700, "normal image left at its original size")
+        check(st2["looks_like_drawing"] is True,
+              "a white-paper line drawing is recognized as a drawing")
+        # a noisy continuous-tone image (photo-like) is flagged, not blocked
+        photo = np.random.default_rng(0).integers(
+            0, 255, (300, 400), dtype=np.uint8)
+        pp = os.path.join(d, "photo.png")
+        cv2.imwrite(pp, photo)
+        st3 = scan2cad.convert(pp, os.path.join(d, "photo.dxf"),
+                               do_page_crop=False, do_deskew=False,
+                               do_ocr=False, log=lambda m: None)
+        check(st3["looks_like_drawing"] is False,
+              "a continuous-tone (photo-like) image is flagged, still converted")
 
 
 def test_convert_stats_summary():
