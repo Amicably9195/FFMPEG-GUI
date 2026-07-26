@@ -1,7 +1,20 @@
 # HANDOFF — Start here
 
-**The single most important thing right now:** the owner adopted a refined
-vision doc (now `VISION.md`) and its concrete mechanisms are all shipped:
+**The single most important thing right now:** REAL public-domain drawings are
+now flowing — the LoC HABS/HAER downloader is live-validated (a user ran it;
+slug + PowerShell fixes folded back in), and `run_drawing2cad.ps1` does
+setup→download→convert-all in one Windows command. The pipeline was hardened
+for real archival scans: 4500px downscale cap, photo-vs-drawing flag, and
+Python-3.14-resilient setup (RapidOCR optional). **Next real signal:** the
+owner's converted outputs (`.svg`/`.diff.png`) — analyze those to see how
+Drawing2CAD does on genuine HABS sheets and harden what's weak. Guardrail
+byte-identical throughout; 109 tests green.
+
+---
+_Earlier this session (vision-doc mechanisms, all shipped):_
+
+The owner adopted a refined vision doc (now `VISION.md`) and its concrete
+mechanisms are all shipped:
 green/yellow/red review tiers (provenance sidecar + DXF layers TEXT /
 TEXT_CHECK / TEXT_REVIEW + SVG colours), plus SVG preview export (`--svg`) with
 dimensions and a **verification overlay** (source image faint under the

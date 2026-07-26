@@ -11,6 +11,28 @@ Format: `YYYY-MM-DD — <engineer> — <summary>` then bullets.
 
 ## Unreleased
 
+### 2026-07-23 — Claude Code — Real-drawing readiness + one-click Windows run
+- **Curated download, live-validated.** Wired the Library of Congress
+  HABS/HAER/HALS downloader (`dataset_builder.fetch_loc` + PowerShell
+  `scripts/fetch_loc_drawings.ps1`); a user's live run fixed the collection
+  slug (`historic-american-buildings-landscapes-and-engineering-records`; the
+  old per-survey slug 404s) and a PowerShell parse trap. See DATASET.md.
+- **`run_drawing2cad.ps1`** — one Windows command does everything: set up a
+  venv + deps, download N public-domain drawings, convert them all
+  (DXF + SVG + missed-ink audit), open the results.
+- **Resilient setup** for bleeding-edge Python (3.14): RapidOCR is optional
+  (no wheel yet; Tesseract still reads text), core deps install individually,
+  the installer prefers a supported Python (3.12) and stops with one clear fix
+  if OpenCV has no wheel. `requirements.txt` unpins the optional reader.
+- **Large-scan guard**: `convert()` caps the long edge at 4500px so 6000–
+  10000px archival sheets don't crawl or exhaust memory (detail preserved;
+  pixel-unit output and auto-scale unaffected).
+- **Photo-vs-drawing flag**: continuous-tone images (building photos, common
+  in HABS) are flagged ("N% non-white … vector output will be poor") and still
+  converted — honest, never blocking. Exposed as `looks_like_drawing`.
+- All safe by construction (size/whiteness gates never trigger on the ~800px
+  synthetic plans); guardrail byte-identical. `tests.py` → 109.
+
 ### 2026-07-23 — Claude Code — Missed-ink audit (`--diff`)
 - `diffview.py` (new) + `convert(..., diff_out=True)` and a `--diff` CLI flag:
   the "what did it miss?" complement to the SVG overlay (roadmap Phase E,
