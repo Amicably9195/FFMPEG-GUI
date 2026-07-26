@@ -428,6 +428,34 @@ def test_diffview_missed_ink():
           "missed ink is painted red")
 
 
+def test_convert_downscales_huge_scans():
+    import os
+    import tempfile
+    import scan2cad
+    print("convert() - caps very large scans, leaves normal ones alone")
+    with tempfile.TemporaryDirectory() as d:
+        # a 6000px-wide scan with a couple of lines
+        big = np.full((1200, 6000), 255, np.uint8)
+        cv2.line(big, (200, 300), (5800, 300), 0, 4)
+        cv2.line(big, (200, 600), (5800, 600), 0, 4)
+        bp = os.path.join(d, "big.png")
+        cv2.imwrite(bp, big)
+        st = scan2cad.convert(bp, os.path.join(d, "big.dxf"),
+                              do_page_crop=False, do_deskew=False,
+                              do_ocr=False, log=lambda m: None)
+        check(max(st["size"]) <= 4500,
+              "6000px scan downscaled to <=4500px long edge")
+        # a normal-sized image is untouched
+        small = np.full((400, 700), 255, np.uint8)
+        cv2.rectangle(small, (40, 40), (660, 360), 0, 3)
+        sp = os.path.join(d, "small.png")
+        cv2.imwrite(sp, small)
+        st2 = scan2cad.convert(sp, os.path.join(d, "small.dxf"),
+                               do_page_crop=False, do_deskew=False,
+                               do_ocr=False, log=lambda m: None)
+        eq(max(st2["size"]), 700, "normal image left at its original size")
+
+
 def test_convert_stats_summary():
     import os
     import tempfile
@@ -540,6 +568,7 @@ def main():
         test_write_dxf_text_tiers,
         test_svg_export,
         test_diffview_missed_ink,
+        test_convert_downscales_huge_scans,
         test_convert_stats_summary,
         test_convert_svg_out_end_to_end,
         test_corrections_apply_end_to_end,

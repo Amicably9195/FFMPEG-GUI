@@ -1533,6 +1533,20 @@ def convert(input_path, output_path=None, *,
     log(f"Reading {os.path.basename(input_path)} ...")
     gray = load_gray(input_path)
 
+    # Real archival scans (HABS/HAER sheets, large-format surveys) can be
+    # 6000-10000 px on the long edge - three OCR passes plus distance
+    # transforms on that crawl and can exhaust memory. Cap the long edge; the
+    # linework loses no meaningful detail above ~4500 px and everything
+    # downstream works in these pixels, so pixel-unit output stays consistent
+    # and auto-scale (derived from dimensions) is unaffected.
+    _long = max(gray.shape[:2])
+    if _long > 4500:
+        f = 4500.0 / _long
+        gray = cv2.resize(gray, (int(gray.shape[1] * f), int(gray.shape[0] * f)),
+                          interpolation=cv2.INTER_AREA)
+        log(f"Large scan ({_long}px) downscaled to {max(gray.shape[:2])}px "
+            f"for speed (linework detail preserved).")
+
     if do_page_crop:
         quad = find_page_quad(gray)
         warped = warp_to_page(gray, quad) if quad is not None else None
