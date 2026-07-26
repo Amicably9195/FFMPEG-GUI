@@ -135,6 +135,17 @@ class Drawing2CADApp(_BASE):
                         variable=self.v_smart, fg_color=ACCENT,
                         hover_color=ACCENT2,
                         font=("Segoe UI", 12)).pack(side="left", padx=8)
+        # extra verification outputs (off by default)
+        self.v_svg = tk.BooleanVar(value=False)
+        self.v_diff = tk.BooleanVar(value=False)
+        ctk.CTkCheckBox(orow3, text="SVG preview",
+                        variable=self.v_svg, fg_color=ACCENT,
+                        hover_color=ACCENT2,
+                        font=("Segoe UI", 12)).pack(side="left", padx=8)
+        ctk.CTkCheckBox(orow3, text="Missed-ink audit",
+                        variable=self.v_diff, fg_color=ACCENT,
+                        hover_color=ACCENT2,
+                        font=("Segoe UI", 12)).pack(side="left", padx=8)
         ctk.CTkLabel(orow3, text="Output:", text_color=MUTED,
                      font=("Segoe UI", 12)).pack(side="left", padx=(18, 4))
         self.v_fmt = tk.StringVar(value="DXF")
@@ -255,11 +266,17 @@ class Drawing2CADApp(_BASE):
                     flag_review=self.v_review.get(),
                     deep_clean=self.v_clean.get(),
                     smart_read=self.v_smart.get(),
+                    svg_out=self.v_svg.get(),
+                    diff_out=self.v_diff.get(),
                     min_line_px=self._float(self.e_minline, 6.0),
                     speck_px=int(self._float(self.e_speck, 8)),
                     log=self._log)
                 ok += 1
                 self._log(f"DONE -> {stats['output']}")
+                if stats.get("missed_fraction") is not None:
+                    self._log(f"  Missed-ink audit: "
+                              f"{stats['missed_fraction'] * 100:.1f}% of source "
+                              f"ink uncaptured (see .diff.png).")
                 side = os.path.splitext(stats["output"])[0] + ".review.json"
                 if os.path.exists(side):
                     self._last_reviews.append(side)

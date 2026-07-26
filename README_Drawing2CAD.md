@@ -81,6 +81,8 @@ Options:
 | Auto-scale to feet | Verifies dimensions against drawn lines and outputs the DXF in feet |
 | Flag uncertain text | Puts low-confidence OCR on the red TEXT_REVIEW layer, boxed |
 | Deep-clean dirty scans | Auto-detects speckled photocopies and scrubs them before vectorizing |
+| SVG preview | Also writes a `.svg` you can open in any browser — the recovered vectors over a faint copy of the original, so you can check the reconstruction without CAD software |
+| Missed-ink audit | Also writes a `.diff.png` that paints in **red** any ink from the original that no recovered entity captured, and reports the % missed — a quick "what did it miss?" check |
 | Units per pixel | Scale factor for the output coordinates |
 | Min line / specks | Noise filtering — raise these for dirty scans |
 
