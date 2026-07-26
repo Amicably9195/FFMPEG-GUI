@@ -390,6 +390,36 @@ def test_svg_export():
         eq(texts.get("8ATH"), svg_export._TIER_FILL["red"],
            "flagged text drawn red")
         check("24'-0\"" in texts, "dimension value drawn in the preview")
+        # overlay: a background image embeds as a faint <image>
+        p2 = os.path.join(d, "bg.svg")
+        bg = np.full((60, 120), 255, np.uint8)
+        svg_export.write_svg(p2, 120, 60, segments=[(5, 30, 115, 30)],
+                             background=bg)
+        imgs = [e for e in ET.parse(p2).getroot() if e.tag.endswith("image")]
+        check(len(imgs) == 1 and imgs[0].get("opacity") == "0.30",
+              "background embedded as a faint overlay image")
+
+
+def test_convert_svg_out_end_to_end():
+    import os
+    import tempfile
+    import xml.etree.ElementTree as ET
+    import scan2cad
+    print("convert(svg_out=True) - writes a valid SVG alongside the DXF")
+    img = np.full((160, 220), 255, np.uint8)
+    cv2.rectangle(img, (30, 30), (190, 130), 0, 3)      # a simple room
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "room.png")
+        cv2.imwrite(p, img)
+        dxf = os.path.join(d, "room.dxf")
+        scan2cad.convert(p, dxf, do_page_crop=False, do_deskew=False,
+                         do_ocr=False, svg_out=True, log=lambda m: None)
+        svg = os.path.join(d, "room.svg")
+        check(os.path.exists(svg), "SVG written next to the DXF")
+        root = ET.parse(svg).getroot()                  # valid XML
+        geom = [e for e in root if e.tag.split("}")[-1]
+                in ("line", "polyline", "polygon")]
+        check(len(geom) >= 1, "recovered geometry appears in the preview")
 
 
 def test_write_dxf_text_tiers():
@@ -462,6 +492,7 @@ def main():
         test_write_dxf_layers,
         test_write_dxf_text_tiers,
         test_svg_export,
+        test_convert_svg_out_end_to_end,
         test_corrections_apply_end_to_end,
         test_enhance_faded_ocr_gate,
         test_verify_ring_gate,

@@ -11,6 +11,7 @@ Modular by design (VISION.md): it consumes the geometry the pipeline already
 produced and touches nothing else.
 """
 
+import base64
 import math
 from xml.sax.saxutils import escape
 
@@ -46,12 +47,34 @@ def _arc_polyline(cx, cy, r, p1, p2, pm):
              cy + r * math.sin(a1 + sweep * t / n)) for t in range(n + 1)]
 
 
+def _png_data_uri(image):
+    """Encode a grayscale/BGR ndarray as a base64 PNG data URI, or None."""
+    try:
+        import cv2
+        ok, buf = cv2.imencode(".png", image)
+        if not ok:
+            return None
+        return "data:image/png;base64," + base64.b64encode(buf).decode("ascii")
+    except Exception:
+        return None
+
+
 def write_svg(path, img_w, img_h, segments=(), curves=(), words=(),
-              rounds=(), dashed=(), dims=(), min_len_px=6.0):
-    """Write an SVG preview in source-image pixel coordinates (y-down)."""
+              rounds=(), dashed=(), dims=(), background=None, min_len_px=6.0):
+    """Write an SVG preview in source-image pixel coordinates (y-down).
+
+    If `background` (the source image, an ndarray) is given, it is embedded
+    faintly UNDER the recovered vectors, turning the preview into a
+    verification overlay: you can see whether each recovered line follows the
+    original stroke."""
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{img_w}" '
            f'height="{img_h}" viewBox="0 0 {img_w} {img_h}">',
            f'<rect width="{img_w}" height="{img_h}" fill="white"/>']
+    if background is not None:
+        uri = _png_data_uri(background)
+        if uri:
+            out.append(f'<image href="{uri}" x="0" y="0" width="{img_w}" '
+                       f'height="{img_h}" opacity="0.30"/>')
 
     seg = np.asarray(segments, dtype=float) if len(segments) else \
         np.empty((0, 4))

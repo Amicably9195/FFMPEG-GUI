@@ -11,6 +11,15 @@ Format: `YYYY-MM-DD — <engineer> — <summary>` then bullets.
 
 ## Unreleased
 
+### 2026-07-23 — Claude Code — SVG verification overlay + end-to-end test
+- The `--svg` preview now embeds the **source image faintly under the recovered
+  vectors** (`write_svg(background=...)`, 30% opacity), turning it into the
+  verification overlay the roadmap's Phase E calls for: you can see at a glance
+  whether each recovered line follows the original stroke. Also completed the
+  preview to draw DIMENSION entities (line + value).
+- Added an end-to-end test: `convert(svg_out=True)` writes a valid SVG next to
+  the DXF with the recovered geometry. `tests.py` → 88.
+
 ### 2026-07-23 — Claude Code — SVG preview export
 - `svg_export.py` (new modular engine) + `convert(..., svg_out=True)` and a
   `--svg` CLI flag: write a browser-viewable `.svg` of the SAME recovered

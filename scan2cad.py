@@ -1720,7 +1720,7 @@ def convert(input_path, output_path=None, *,
             svg_export.write_svg(svg_path, gray.shape[1], gray.shape[0],
                                  segments=segs, curves=curves, words=words,
                                  rounds=rounds, dashed=dashed, dims=dim_pairs,
-                                 min_len_px=min_line_px)
+                                 background=gray, min_len_px=min_line_px)
             log(f"Wrote SVG preview {svg_path}")
         except Exception as exc:
             log(f"(SVG preview skipped: {exc})")
