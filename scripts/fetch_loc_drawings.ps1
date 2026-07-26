@@ -47,9 +47,9 @@ while ($got -lt $Count) {
 
   foreach ($item in $data.results) {
     if ($got -ge $Count) { break }
-    $urls = $item.image_url
-    if (-not $urls) { continue }
-    $img = $urls[-1]                       # largest offered
+    $urls = @($item.image_url)             # force to an array (may be 1 string)
+    if ($urls.Count -eq 0) { continue }
+    $img = [string]$urls[$urls.Count - 1]  # largest offered
     if ($img.StartsWith("//")) { $img = "https:" + $img }
 
     $name = "loc_{0:D4}.jpg" -f $got
