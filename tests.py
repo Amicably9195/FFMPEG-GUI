@@ -428,6 +428,40 @@ def test_diffview_missed_ink():
           "missed ink is painted red")
 
 
+def test_convert_bordered_drawing_with_title_block():
+    import os
+    import tempfile
+    import json
+    import scan2cad
+    print("convert() - a bordered sheet with a title block converts cleanly")
+    W, H = 1200, 900
+    img = np.full((H, W), 255, np.uint8)
+    cv2.rectangle(img, (25, 25), (W - 25, H - 25), 0, 3)      # sheet border
+    cv2.rectangle(img, (180, 180), (760, 620), 0, 5)         # plan (thick walls)
+    cv2.line(img, (180, 400), (450, 400), 0, 5)
+    cv2.line(img, (540, 400), (760, 400), 0, 5)              # interior wall + door
+    cv2.circle(img, (300, 300), 18, 0, 4)                    # column
+    cv2.rectangle(img, (820, 660), (W - 30, H - 30), 0, 2)  # title block
+    for yy in (700, 740, 780):
+        cv2.line(img, (820, yy), (W - 30, yy), 0, 1)         # ruled lines
+    cv2.putText(img, "HABS", (835, 695), cv2.FONT_HERSHEY_SIMPLEX, 0.6, 0, 1)
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "sheet.png")
+        cv2.imwrite(p, img)
+        dxf = os.path.join(d, "sheet.dxf")
+        st = scan2cad.convert(p, dxf, do_page_crop=False, do_deskew=False,
+                              do_ocr=False, diff_out=True, log=lambda m: None)
+        check(st["looks_like_drawing"] is True, "recognized as a drawing")
+        check(st["circles"] >= 1, "the column is recovered as a circle")
+        check(st["missed_fraction"] < 0.05,
+              "border + plan + title block: <5% of ink missed")
+        lint = os.path.splitext(dxf)[0] + ".lint.json"
+        if os.path.exists(lint):
+            sev = json.load(open(lint))["summary"]["by_severity"]
+            eq(sev["high"] + sev["medium"], 0,
+               "no actionable lint on a clean bordered drawing")
+
+
 def test_convert_downscales_huge_scans():
     import os
     import tempfile
@@ -580,6 +614,7 @@ def main():
         test_write_dxf_text_tiers,
         test_svg_export,
         test_diffview_missed_ink,
+        test_convert_bordered_drawing_with_title_block,
         test_convert_downscales_huge_scans,
         test_convert_stats_summary,
         test_convert_svg_out_end_to_end,
