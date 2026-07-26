@@ -28,6 +28,7 @@ except Exception:                                   # pragma: no cover
 _LINE = "#111111"       # solid linework
 _HIDDEN = "#cc2222"     # dashed / hidden
 _CURVE = "#1b6fb3"      # curves, circles, arcs
+_DIM = "#7a3fb3"        # dimensions (line + value)
 _TIER_FILL = {"green": "#1f9d3a", "yellow": "#c79a00", "red": "#cc2222"}
 
 
@@ -46,7 +47,7 @@ def _arc_polyline(cx, cy, r, p1, p2, pm):
 
 
 def write_svg(path, img_w, img_h, segments=(), curves=(), words=(),
-              rounds=(), dashed=(), min_len_px=6.0):
+              rounds=(), dashed=(), dims=(), min_len_px=6.0):
     """Write an SVG preview in source-image pixel coordinates (y-down)."""
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{img_w}" '
            f'height="{img_h}" viewBox="0 0 {img_w} {img_h}">',
@@ -81,6 +82,17 @@ def write_svg(path, img_w, img_h, segments=(), curves=(), words=(),
             s = " ".join(f"{x:.1f},{y:.1f}" for x, y in pts)
             out.append(f'<polyline points="{s}" fill="none" stroke="{_CURVE}" '
                        f'stroke-width="1.5"/>')
+
+    for wd, span in dims:
+        x1, y1, x2, y2 = (float(span[0]), float(span[1]),
+                          float(span[2]), float(span[3]))
+        out.append(f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" '
+                   f'y2="{y2:.1f}" stroke="{_DIM}" stroke-width="1.2"/>')
+        mx, my = (x1 + x2) / 2, (y1 + y2) / 2
+        out.append(f'<text x="{mx:.1f}" y="{my - 3:.1f}" font-size="11" '
+                   f'font-family="Arial, sans-serif" fill="{_DIM}" '
+                   f'text-anchor="middle">'
+                   f'{escape(str(wd.get("text", "")))}</text>')
 
     for wd in words:
         px, py = wd.get("insert", (wd.get("x", 0), wd.get("y", 0)))

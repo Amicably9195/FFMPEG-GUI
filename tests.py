@@ -375,19 +375,21 @@ def test_svg_export():
               "insert": (80, 120), "review": True}]            # red
     with tempfile.TemporaryDirectory() as d:
         p = os.path.join(d, "t.svg")
+        dims = [({"text": "24'-0\""}, [10, 200, 200, 200])]
         svg_export.write_svg(p, 400, 300, segments=[(10, 10, 200, 10)],
                              curves=[], words=words,
                              rounds=[("circle", 100, 100, 20, 0.9)],
-                             dashed=[(10, 50, 200, 50)])
+                             dashed=[(10, 50, 200, 50)], dims=dims)
         root = ET.parse(p).getroot()          # must be valid XML
         tags = [e.tag.split("}")[-1] for e in root]
-        check(tags.count("line") == 2, "solid + dashed lines emitted")
+        check(tags.count("line") == 3, "solid + dashed + dimension lines emitted")
         check(tags.count("circle") == 1, "circle emitted")
         texts = {e.text: e.get("fill") for e in root if e.tag.endswith("text")}
         eq(texts.get("KITCHEN"), svg_export._TIER_FILL["green"],
            "confident text drawn green")
         eq(texts.get("8ATH"), svg_export._TIER_FILL["red"],
            "flagged text drawn red")
+        check("24'-0\"" in texts, "dimension value drawn in the preview")
 
 
 def test_write_dxf_text_tiers():
