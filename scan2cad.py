@@ -1476,6 +1476,7 @@ def convert(input_path, output_path=None, *,
             review_out=False,
             do_verify=True,
             svg_out=False,
+            diff_out=False,
             review_conf=70,
             min_line_px=6.0,
             speck_px=8,
@@ -1724,6 +1725,19 @@ def convert(input_path, output_path=None, *,
             log(f"Wrote SVG preview {svg_path}")
         except Exception as exc:
             log(f"(SVG preview skipped: {exc})")
+    missed_fraction = None
+    if diff_out:
+        # "what did it miss?" audit: source ink not captured by any entity
+        try:
+            import diffview
+            diff_path = os.path.splitext(output_path)[0] + ".diff.png"
+            missed_fraction = diffview.write_diff(
+                diff_path, gray, segments=segs, curves=curves, words=words,
+                rounds=rounds, dashed=dashed, dims=dim_pairs)
+            log(f"Wrote missed-ink audit {diff_path} "
+                f"({missed_fraction * 100:.1f}% of source ink uncaptured)")
+        except Exception as exc:
+            log(f"(missed-ink audit skipped: {exc})")
     if review_out:
         # sidecar for the review/correction screen (Phase C data flywheel)
         try:
@@ -1780,7 +1794,7 @@ def convert(input_path, output_path=None, *,
                 dimensions=len(dim_pairs), circles=len(rounds),
                 dashed=int(len(dashed)), words=len(words), review=n_review,
                 scale=scale, units="feet" if units_feet else "pixels",
-                size=gray.shape)
+                missed_fraction=missed_fraction, size=gray.shape)
 
 
 def render_preview(dxf_path, png_path, dpi=150):
@@ -1830,6 +1844,9 @@ def main():
                          "correction screen (python review_gui.py ...)")
     ap.add_argument("--svg", action="store_true",
                     help="also write a browser-viewable .svg preview")
+    ap.add_argument("--diff", action="store_true",
+                    help="also write a .diff.png audit (source ink NOT "
+                         "captured, in red)")
     ap.add_argument("--no-verify", action="store_true",
                     help="skip the drawing-lint pass (.lint.json)")
     ap.add_argument("--review-conf", type=float, default=70,
@@ -1856,6 +1873,7 @@ def main():
             review_out=args.review,
             do_verify=not args.no_verify,
             svg_out=args.svg,
+            diff_out=args.diff,
             review_conf=args.review_conf,
             min_line_px=args.min_line,
             speck_px=args.speck)

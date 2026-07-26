@@ -11,6 +11,21 @@ Format: `YYYY-MM-DD — <engineer> — <summary>` then bullets.
 
 ## Unreleased
 
+### 2026-07-23 — Claude Code — Missed-ink audit (`--diff`)
+- `diffview.py` (new) + `convert(..., diff_out=True)` and a `--diff` CLI flag:
+  the "what did it miss?" complement to the SVG overlay (roadmap Phase E,
+  "differences highlighted"). Rasterizes the recovered geometry, compares it to
+  the source ink, and writes a `.diff.png` with the **uncaptured source ink in
+  red** — needs no ground truth (the source is the reference). Text regions are
+  excluded so unrecovered *lettering* isn't counted as missed *geometry*.
+- Returns a `missed_fraction` (share of source ink not captured) — a
+  per-drawing "how complete is this reconstruction?" number a professional can
+  trust without a benchmark (2.4% on a clean synthetic plan). Added to the
+  `convert()` summary dict.
+- Additive/safe (separate output, default off); guardrail unchanged. `tests.py`
+  +4 → 102 (near-zero missed when all ink captured; uncaptured line flagged
+  red). Added to the PyInstaller spec.
+
 ### 2026-07-23 — Claude Code — SVG verification overlay + end-to-end test
 - The `--svg` preview now embeds the **source image faintly under the recovered
   vectors** (`write_svg(background=...)`, 30% opacity), turning it into the

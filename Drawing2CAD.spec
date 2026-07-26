@@ -3,7 +3,7 @@ from PyInstaller.utils.hooks import collect_all
 
 datas = []
 binaries = []
-hiddenimports = ['scan2cad', 'pdf2cad', 'smart_ocr', 'cad_io', 'corrections', 'provenance', 'verify', 'svg_export', 'review_gui', 'pytesseract', 'ezdxf']
+hiddenimports = ['scan2cad', 'pdf2cad', 'smart_ocr', 'cad_io', 'corrections', 'provenance', 'verify', 'svg_export', 'diffview', 'review_gui', 'pytesseract', 'ezdxf']
 tmp_ret = collect_all('rapidocr_onnxruntime')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('pymupdf')

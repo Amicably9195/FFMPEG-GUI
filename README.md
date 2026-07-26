@@ -82,7 +82,10 @@ build.
 - `cad_io.py` — DWG/DGN in and out via a detected converter (ODA / LibreDWG),
   graceful DXF fallback.
 - `svg_export.py` — optional browser-viewable `.svg` preview of the recovered
-  geometry (`--svg`), text coloured by review tier.
+  geometry (`--svg`), with the source image faintly underneath as a
+  verification overlay; text coloured by review tier.
+- `diffview.py` — optional `.diff.png` audit (`--diff`) highlighting source ink
+  that no recovered entity captured (in red); returns a `missed_fraction`.
 - `drawing2cad_gui.py` — the desktop GUI.
 
 **Trust & review**

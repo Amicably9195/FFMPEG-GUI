@@ -400,6 +400,23 @@ def test_svg_export():
               "background embedded as a faint overlay image")
 
 
+def test_diffview_missed_ink():
+    import diffview
+    print("diffview.analyze - flags uncaptured source ink, not captured ink")
+    src = np.full((120, 300), 255, np.uint8)
+    cv2.line(src, (20, 40), (280, 40), 0, 3)     # captured line
+    cv2.line(src, (20, 90), (280, 90), 0, 3)     # NOT given to the analyzer
+    # only the first line is "recovered"
+    frac_full, _ = diffview.analyze(
+        src, segments=[(20, 40, 280, 40), (20, 90, 280, 90)])
+    check(frac_full < 0.05, "all ink captured -> near-zero missed fraction")
+    frac_half, diff = diffview.analyze(src, segments=[(20, 40, 280, 40)])
+    check(frac_half > 0.3, "an uncaptured line shows up as missed ink")
+    check(diff.shape == (120, 300, 3), "diff image is RGB, source-sized")
+    check((diff == (0, 0, 255)).all(axis=2).any(),
+          "missed ink is painted red")
+
+
 def test_convert_stats_summary():
     import os
     import tempfile
@@ -511,6 +528,7 @@ def main():
         test_write_dxf_layers,
         test_write_dxf_text_tiers,
         test_svg_export,
+        test_diffview_missed_ink,
         test_convert_stats_summary,
         test_convert_svg_out_end_to_end,
         test_corrections_apply_end_to_end,
