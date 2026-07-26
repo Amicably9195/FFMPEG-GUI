@@ -11,14 +11,21 @@
 #
 # i.e. always let opencv-contrib-python-headless win LAST. (The CI workflow and
 # README document the same dance.)
+#
+# PYTHON VERSION: use 3.11 or 3.12. Brand-new releases (e.g. 3.14) may not have
+# wheels yet for OpenCV / RapidOCR. run_drawing2cad.ps1 handles this
+# automatically (prefers a supported Python, skips the optional reader).
 
 numpy>=1.24
 ezdxf>=1.1
 pytesseract>=0.3.10
 pillow>=10.0
 pymupdf>=1.23
-rapidocr_onnxruntime>=1.3
 opencv-contrib-python-headless>=4.8
+
+# Optional neural reader (a second OCR opinion). Not built for the very newest
+# Python releases; the app degrades gracefully to Tesseract-only without it.
+rapidocr_onnxruntime
 
 # GUI only (headless conversion via scan2cad.py / benchmark.py does not need
 # these; the desktop app drawing2cad_gui.py does):

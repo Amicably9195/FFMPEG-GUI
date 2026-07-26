@@ -50,19 +50,57 @@ Write-Host ("Found " + (python --version 2>&1))
 # ---------------------------------------------------------------- 2. Deps
 Say "2/5  Setting up the environment (first run takes a few minutes)"
 $py = Join-Path $repo ".venv\Scripts\python.exe"
-if (-not (Test-Path $py)) { python -m venv .venv }
-& $py -m pip install --quiet --upgrade pip
+# Build the venv with a Python the ecosystem fully supports if one is present
+# (OpenCV / RapidOCR lag brand-new Python releases like 3.14). Prefer 3.12/3.11
+# via the 'py' launcher; otherwise use whatever 'python' is.
+if (-not (Test-Path $py)) {
+  $made = $false
+  if (Get-Command py -ErrorAction SilentlyContinue) {
+    foreach ($v in @("3.12", "3.11")) {
+      py "-$v" -m venv .venv 2>$null
+      if (($LASTEXITCODE -eq 0) -and (Test-Path $py)) {
+        Write-Host "Using Python $v for the environment." ; $made = $true ; break
+      }
+    }
+  }
+  if (-not $made) { python -m venv .venv }
+}
+& $py -m pip install --quiet --upgrade pip setuptools wheel
+
 $marker = Join-Path $repo ".venv\.deps_ok"
 if (-not (Test-Path $marker)) {
-  & $py -m pip install --quiet -r requirements.txt
-  # opencv-contrib must win last (RapidOCR drags in plain opencv)
-  & $py -m pip uninstall -y --quiet opencv-python opencv-python-headless 2>$null
-  & $py -m pip install --quiet --force-reinstall --no-deps opencv-contrib-python-headless
+  # core stack (geometry + Tesseract OCR) - install each so one failure doesn't
+  # abort the rest
+  foreach ($pkg in @("numpy", "ezdxf", "pytesseract", "pillow",
+                     "opencv-contrib-python-headless")) {
+    Write-Host "  installing $pkg ..."
+    & $py -m pip install --quiet $pkg
+  }
+  # optional neural reader - not yet built for very new Python; skipping it is
+  # fine (Tesseract still reads text; geometry is unaffected)
+  & $py -m pip install --quiet rapidocr_onnxruntime 2>$null
+  if ($LASTEXITCODE -ne 0) {
+    Write-Host "  (RapidOCR unavailable on this Python - Tesseract only; geometry unaffected.)" -ForegroundColor Yellow
+  }
   "ok" | Set-Content $marker
+}
+
+# essential-stack sanity check - if OpenCV/numpy have no wheels for this Python,
+# stop with the one fix instead of failing deep in conversion
+& $py -c "import cv2, numpy, ezdxf" 2>$null
+if ($LASTEXITCODE -ne 0) {
+  Write-Host ""
+  Write-Host "The core libraries (OpenCV/numpy) have no wheels for your Python yet:" -ForegroundColor Yellow
+  Write-Host ("  " + (python --version 2>&1)) -ForegroundColor Yellow
+  Write-Host "One-time fix - install Python 3.12 (fully supported), tick 'Add python.exe to PATH':" -ForegroundColor Yellow
+  Write-Host "  https://www.python.org/downloads/release/python-3129/" -ForegroundColor Yellow
+  Write-Host "Then delete the .venv folder in this repo and re-run this script." -ForegroundColor Yellow
+  Remove-Item $marker -ErrorAction SilentlyContinue
+  return
 }
 # Tesseract is optional (OCR); geometry works without it
 if (-not (Get-Command tesseract -ErrorAction SilentlyContinue)) {
-  Write-Host "Note: Tesseract not found - you'll get clean geometry but no text/OCR." -ForegroundColor Yellow
+  Write-Host "Note: Tesseract not found - clean geometry, but no text/OCR." -ForegroundColor Yellow
   Write-Host "      Optional install: https://github.com/UB-Mannheim/tesseract/wiki" -ForegroundColor Yellow
 }
 
