@@ -57,7 +57,7 @@ while ($got -lt $Count) {
     try {
       Invoke-WebRequest -Uri $img -Headers @{ "User-Agent" = $ua } -OutFile $imgPath -TimeoutSec 60
     } catch {
-      Write-Warning "skip $name: $_"
+      Write-Warning "skip ${name}: $_"
       continue
     }
 
