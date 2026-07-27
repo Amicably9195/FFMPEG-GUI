@@ -428,6 +428,23 @@ def test_diffview_missed_ink():
           "missed ink is painted red")
 
 
+def test_detect_border_segments():
+    import scan2cad as c
+    print("scan2cad.detect_border_segments - frame vs interior walls")
+    shape = (900, 1200)
+    segs = [
+        (25, 25, 1175, 25),      # top frame  -> border
+        (25, 875, 1175, 875),    # bottom frame -> border
+        (25, 25, 25, 875),       # left frame -> border
+        (180, 180, 760, 180),    # interior wall (inset) -> NOT border
+        (180, 400, 450, 400),    # short interior wall -> NOT border
+    ]
+    f = c.detect_border_segments(segs, shape)
+    check(f[0] and f[1] and f[2], "sheet frame lines flagged as border")
+    check(not f[3], "long interior wall inset from the edge is NOT a border")
+    check(not f[4], "short interior wall is NOT a border")
+
+
 def test_convert_bordered_drawing_with_title_block():
     import os
     import tempfile
@@ -614,6 +631,7 @@ def main():
         test_write_dxf_text_tiers,
         test_svg_export,
         test_diffview_missed_ink,
+        test_detect_border_segments,
         test_convert_bordered_drawing_with_title_block,
         test_convert_downscales_huge_scans,
         test_convert_stats_summary,

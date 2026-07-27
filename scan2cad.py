@@ -219,6 +219,28 @@ def stroke_width(ink):
 _LW_THIN, _LW_NORMAL, _LW_THICK = 18, 25, 50
 
 
+def detect_border_segments(segments, shape, edge_frac=0.04, span_frac=0.7):
+    """Flag segments that form the sheet BORDER frame: a long, axis-aligned
+    line hugging an edge of the sheet. Conservative by design - it requires the
+    line to be BOTH near an edge AND to span most of that dimension, so an
+    interior wall (inset from the edge) is never caught. Returns a boolean list
+    aligned to `segments`. Layer-only: even a misclassification loses nothing.
+    """
+    h, w = shape[:2]
+    flags = []
+    for x1, y1, x2, y2 in segments:
+        dx, dy = abs(x2 - x1), abs(y2 - y1)
+        border = False
+        if dx > span_frac * w and dy < 5:            # long horizontal
+            y = (y1 + y2) / 2.0
+            border = y < edge_frac * h or y > (1 - edge_frac) * h
+        elif dy > span_frac * h and dx < 5:          # long vertical
+            x = (x1 + x2) / 2.0
+            border = x < edge_frac * w or x > (1 - edge_frac) * w
+        flags.append(bool(border))
+    return flags
+
+
 def estimate_lineweights(ink, segments):
     """Per-segment DXF lineweight from measured stroke width, or None.
 
@@ -1357,7 +1379,7 @@ def residual_curves(ink, segs, width, min_area=40, epsilon=1.8):
 
 def write_dxf(path, img_h, segments, curves, words, scale=1.0,
               min_len_px=6.0, units_feet=False, rounds=(), dashed=(),
-              dims=(), lineweights=None):
+              dims=(), lineweights=None, border_flags=None):
     doc = ezdxf.new("R2010", setup=True)
     if lineweights is not None:
         doc.header["$LWDISPLAY"] = 1   # show the recovered lineweights
@@ -1368,6 +1390,10 @@ def write_dxf(path, img_h, segments, curves, words, scale=1.0,
         # on its own layer by drafting convention, so a drafter can toggle it
         # independently of the solid linework
         doc.layers.add("HIDDEN", color=1)
+    if border_flags is not None and any(border_flags):
+        # the sheet frame is not drawing content - its own layer so a drafter
+        # can toggle or delete it in one click
+        doc.layers.add("BORDER", color=8)
     doc.layers.add("TEXT", color=3)          # green: confident, minimal review
     doc.layers.add("TEXT_CHECK", color=2)    # yellow: recommended review
     # uncertain text lives on a hidden layer: the drawing opens clean, and
@@ -1388,7 +1414,9 @@ def write_dxf(path, img_h, segments, curves, words, scale=1.0,
     for i, (x1, y1, x2, y2) in enumerate(segments):
         if math.hypot(x2 - x1, y2 - y1) < min_len_px:
             continue
-        attribs = {"layer": "LINES"}
+        is_border = (border_flags is not None and i < len(border_flags)
+                     and border_flags[i])
+        attribs = {"layer": "BORDER" if is_border else "LINES"}
         if lineweights is not None and i < len(lineweights):
             attribs["lineweight"] = lineweights[i]
         msp.add_line(pt(x1, y1), pt(x2, y2), dxfattribs=attribs)
@@ -1728,10 +1756,17 @@ def convert(input_path, output_path=None, *,
 
     lineweights = (estimate_lineweights(line_img, segs)
                    if len(segs) else None)
+    border_flags = (detect_border_segments(segs, gray.shape)
+                    if len(segs) else None)
+    n_border = sum(border_flags) if border_flags else 0
     n_lines = write_dxf(output_path, gray.shape[0], segs, curves, words,
                         scale=scale, min_len_px=min_line_px,
                         units_feet=units_feet, rounds=rounds, dashed=dashed,
-                        dims=dim_pairs, lineweights=lineweights)
+                        dims=dim_pairs, lineweights=lineweights,
+                        border_flags=border_flags)
+    if n_border:
+        log(f"{n_border} sheet-border line(s) moved to the BORDER layer "
+            f"(toggle or delete them in one click).")
     if lineweights is not None:
         log("Estimated line weights from stroke width "
             "(bold walls vs fine lines preserved).")
