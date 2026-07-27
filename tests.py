@@ -374,6 +374,37 @@ def test_write_dxf_layers():
            "dashed linework moved to its own HIDDEN layer")
 
 
+def test_dxf_is_structurally_valid():
+    import os
+    import tempfile
+    from ezdxf import recover
+    import scan2cad
+    print("write_dxf - emitted DXF passes a CAD-grade structural audit")
+    W, H = 1000, 800
+    img = np.full((H, W), 255, np.uint8)
+    cv2.rectangle(img, (25, 25), (W - 25, H - 25), 0, 3)      # border
+    cv2.rectangle(img, (160, 160), (700, 560), 0, 5)          # plan
+    cv2.circle(img, (260, 260), 18, 0, 4)                     # column -> ROUND
+    for x in range(180, 700, 26):                             # dashed -> HIDDEN
+        cv2.line(img, (x, 620), (x + 14, 620), 0, 2)
+    cv2.putText(img, "KITCHEN", (280, 320), cv2.FONT_HERSHEY_SIMPLEX, 0.7, 0, 2)
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "v.png")
+        cv2.imwrite(p, img)
+        dxf = os.path.join(d, "v.dxf")
+        scan2cad.convert(p, dxf, do_page_crop=False, do_deskew=False,
+                         log=lambda m: None)
+        # recover.readfile is effectively what a CAD app does on open
+        doc, auditor = recover.readfile(dxf)
+        eq(len(auditor.errors), 0, "no structural errors on read")
+        a2 = doc.audit()
+        eq(len(a2.errors), 0, "no errors in a full audit")
+        defined = {l.dxf.name for l in doc.layers}
+        used = {e.dxf.layer for e in doc.modelspace()}
+        eq(sorted(used - defined), [],
+           "every layer an entity references is defined in the layer table")
+
+
 def test_round_entities_on_own_layer():
     import os
     import tempfile
@@ -649,6 +680,7 @@ def main():
         test_corrections_dedup,
         test_estimate_lineweights,
         test_write_dxf_layers,
+        test_dxf_is_structurally_valid,
         test_round_entities_on_own_layer,
         test_write_dxf_text_tiers,
         test_svg_export,
