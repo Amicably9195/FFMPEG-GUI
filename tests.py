@@ -374,6 +374,27 @@ def test_write_dxf_layers():
            "dashed linework moved to its own HIDDEN layer")
 
 
+def test_round_entities_on_own_layer():
+    import os
+    import tempfile
+    import ezdxf
+    import scan2cad
+    print("write_dxf - true CIRCLE/ARC entities go on the ROUND layer")
+    img = np.full((400, 400), 255, np.uint8)
+    cv2.circle(img, (200, 200), 60, 0, 4)
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "c.png")
+        cv2.imwrite(p, img)
+        dxf = os.path.join(d, "c.dxf")
+        scan2cad.convert(p, dxf, do_page_crop=False, do_deskew=False,
+                         do_ocr=False, log=lambda m: None)
+        circles = [e for e in ezdxf.readfile(dxf).modelspace()
+                   if e.dxftype() in ("CIRCLE", "ARC")]
+        check(len(circles) >= 1, "the circle is recovered as a CIRCLE entity")
+        eq(circles[0].dxf.layer, "ROUND",
+           "circle placed on ROUND, not mixed into CURVES")
+
+
 def test_svg_export():
     import os
     import tempfile
@@ -628,6 +649,7 @@ def main():
         test_corrections_dedup,
         test_estimate_lineweights,
         test_write_dxf_layers,
+        test_round_entities_on_own_layer,
         test_write_dxf_text_tiers,
         test_svg_export,
         test_diffview_missed_ink,

@@ -1384,7 +1384,11 @@ def write_dxf(path, img_h, segments, curves, words, scale=1.0,
     if lineweights is not None:
         doc.header["$LWDISPLAY"] = 1   # show the recovered lineweights
     doc.layers.add("LINES", color=7)
-    doc.layers.add("CURVES", color=4)
+    doc.layers.add("CURVES", color=4)     # traced polylines (unclassified)
+    if len(rounds):
+        # true CIRCLE/ARC entities are a different kind of recovery from a
+        # traced polyline - columns, arcs, round features get their own layer
+        doc.layers.add("ROUND", color=5)
     if len(dashed):
         # dashed/hidden linework (setback, hidden edges, center lines) belongs
         # on its own layer by drafting convention, so a drafter can toggle it
@@ -1438,7 +1442,7 @@ def write_dxf(path, img_h, segments, curves, words, scale=1.0,
         center = pt(ent[1], ent[2])
         radius = ent[3] * scale
         if ent[0] == "circle":
-            msp.add_circle(center, radius, dxfattribs={"layer": "CURVES"})
+            msp.add_circle(center, radius, dxfattribs={"layer": "ROUND"})
         else:  # arc: pick the sweep that passes through the traced midpoint
             def angle(p):
                 x, y = pt(p[0], p[1])
@@ -1448,7 +1452,7 @@ def write_dxf(path, img_h, segments, curves, words, scale=1.0,
             if not ((a2 - a1) % 360.0) >= ((am - a1) % 360.0):
                 a1, a2 = a2, a1
             msp.add_arc(center, radius, a1, a2,
-                        dxfattribs={"layer": "CURVES"})
+                        dxfattribs={"layer": "ROUND"})
 
     for wd, seg in dims:
         h = max(0.5 * scale, 0.72 * wd["cap"] * scale)
