@@ -1,15 +1,23 @@
 # Drawing2CAD — turn photos/scans of drawings into CAD files
 
 Takes a **photo or scan** of a technical drawing (survey, floor plan, DOB
-print, etc.) and converts it into a **DXF** file with real CAD geometry:
+print, etc.) and converts it into a **DXF** file with real CAD geometry,
+sorted onto meaningful layers so you can work with it like a drawing you drew:
 
-- **LINES** layer — straight linework (walls, borders, dimension lines)
-- **CURVES** layer — traced curves, symbols, thick strokes
-- **TEXT** layer — OCRed text placed where it appears on the drawing,
-  including vertical/rotated labels
-- **TEXT_REVIEW** layer (red, **hidden by default**) — text the OCR was *not*
-  sure about, boxed on the drawing. The file opens clean; turn this layer on
-  in CAD when you want to proofread the uncertain spots
+| Layer | What's on it |
+|---|---|
+| **LINES** | straight linework — walls and general geometry |
+| **BORDER** | the sheet frame, separated so you can toggle or delete it in one click |
+| **HIDDEN** | dashed / hidden linework (setback lines, hidden edges), with a real DASHED linetype |
+| **ROUND** | true CIRCLE / ARC entities (columns, round features) |
+| **CURVES** | traced polylines the software couldn't classify — kept, never dropped |
+| **DIMENSIONS** | editable DIMENSION entities |
+| **TEXT** | text it's confident about (green tier) |
+| **TEXT_CHECK** | text worth a glance (yellow tier) |
+| **TEXT_REVIEW** | uncertain text (red tier) — **hidden by default** and boxed on the drawing, so the file opens clean and you turn it on only to proofread |
+
+Line weights are measured from the original strokes, so bold walls stay bold
+and fine dimension lines stay fine.
 
 It also understands dimensions: labels like `40.00'`, `5'-6"`, `±15'` are
 parsed into feet and cross-checked against the drawn line they measure. When
