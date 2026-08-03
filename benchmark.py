@@ -1,0 +1,475 @@
+#!/usr/bin/env python3
+"""benchmark - scored test bench for the Drawing2CAD converter.
+
+Generates synthetic floor plans with KNOWN ground truth (every wall segment
+and every label), renders them like scans with realistic damage (photocopier
+speckle, blur, uneven light, slight rotation), runs the converter, and
+scores the result:
+
+  line coverage   - how much of the true linework was recovered
+  line precision  - how much of the recovered linework is real (not junk)
+  text accuracy   - how many labels were read correctly
+  scale           - whether the drawing auto-scaled to the right feet
+
+Run:  python benchmark.py [--n 6] [--seed 1] [--keep]
+"""
+
+import argparse
+import os
+import random
+import tempfile
+import time
+
+import cv2
+import numpy as np
+
+import ezdxf
+import scan2cad
+
+# Benchmark version - bump when the plans, damage model, or metrics change,
+# so a score is always comparable only within the same version. This lets us
+# tell whether a gain came from a better algorithm or a changed benchmark.
+BENCHMARK_VERSION = "1.0"
+
+PX_PER_FT = 14.0
+MARGIN = 120
+
+
+def _dim_label(feet):
+    whole = int(feet)
+    inches = round((feet - whole) * 12)
+    if inches == 12:          # rounding rolled a foot - carry it
+        whole += 1
+        inches = 0
+    if inches == 0:
+        return f"{whole}'-0\""
+    return f"{whole}'-{inches}\""
+
+
+ROOM_NAMES = ["KITCHEN", "BED ROOM", "LIVING ROOM", "DINING ROOM", "HALL",
+              "BATH ROOM", "CLOSET", "GARAGE", "PORCH", "CELLAR"]
+
+
+def generate_plan(rng):
+    """Random small floor plan. Returns (segments_ft, labels, dims) where
+    dims are (value_ft, seg_ft) pairs used for scale ground truth."""
+    w = rng.uniform(24, 40)
+    h = rng.uniform(30, 55)
+    segs = [(0, 0, w, 0), (w, 0, w, h), (w, h, 0, h), (0, h, 0, 0)]
+    labels = []
+    dims = []
+    # interior walls with door gaps
+    splits = sorted(rng.uniform(0.25, 0.75) for _ in range(2))
+    for f in splits:
+        y = h * f
+        gap = rng.uniform(0.2, 0.7)
+        segs.append((0, y, w * gap - 1.5, y))
+        segs.append((w * gap + 1.5, y, w, y))
+    x = w * rng.uniform(0.35, 0.65)
+    segs.append((x, 0, x, h * splits[0] - 1.5))
+    # dimension strings along the bottom and left, with tick strokes
+    dim_y = -3.0
+    segs.append((0, dim_y, w, dim_y))
+    for tx in (0, w):
+        segs.append((tx - 0.4, dim_y - 0.4, tx + 0.4, dim_y + 0.4))
+    dims.append((w, (0, dim_y, w, dim_y)))
+    labels.append((_dim_label(w), w / 2, dim_y - 1.2, 0))
+    dim_x = -3.0
+    segs.append((dim_x, 0, dim_x, h))
+    for ty in (0, h):
+        segs.append((dim_x - 0.4, ty - 0.4, dim_x + 0.4, ty + 0.4))
+    dims.append((h, (dim_x, 0, dim_x, h)))
+    labels.append((_dim_label(h), dim_x - 1.2, h / 2, 90))
+    # room names
+    ys = [0] + [h * f for f in splits] + [h]
+    for i in range(len(ys) - 1):
+        cy = (ys[i] + ys[i + 1]) / 2
+        labels.append((rng.choice(ROOM_NAMES), w * 0.55, cy, 0))
+    # a round column - circles must come back as circles
+    circles = [(w * rng.uniform(0.15, 0.3), h * rng.uniform(0.15, 0.3),
+                rng.uniform(0.9, 1.6))]
+    # a dashed setback line above the plan - dashed must stay dashed
+    dashes = [(0, h + 3.0, w, h + 3.0)]
+    return segs, labels, dims, circles, dashes
+
+
+def render(segs, labels, rng, dirty=False, circles=(), dashes=()):
+    """Rasterize the plan the way a scan of it would look."""
+    xs = [s[i] for s in segs for i in (0, 2)]
+    ys = [s[i] for s in segs for i in (1, 3)]
+    x0, y0 = min(xs), min(ys)
+    W = int((max(xs) - x0) * PX_PER_FT) + 2 * MARGIN
+    H = int((max(ys) - y0) * PX_PER_FT) + 2 * MARGIN
+    img = np.full((H, W), 255, np.uint8)
+
+    def pt(x, y):
+        return (int((x - x0) * PX_PER_FT) + MARGIN,
+                H - (int((y - y0) * PX_PER_FT) + MARGIN))
+
+    for x1, y1, x2, y2 in segs:
+        cv2.line(img, pt(x1, y1), pt(x2, y2), 0, 3, cv2.LINE_AA)
+    truth_circ = []
+    for cx, cy, cr in circles:
+        cv2.circle(img, pt(cx, cy), int(cr * PX_PER_FT), 0, 3, cv2.LINE_AA)
+        truth_circ.append((pt(cx, cy), cr * PX_PER_FT))
+    truth_dash = []
+    for x1, y1, x2, y2 in dashes:
+        p1, p2 = np.array(pt(x1, y1), float), np.array(pt(x2, y2), float)
+        span = np.linalg.norm(p2 - p1)
+        u = (p2 - p1) / span
+        on, off, t = 11.0, 7.0, 0.0
+        while t < span:
+            a = p1 + u * t
+            b = p1 + u * min(t + on, span)
+            cv2.line(img, (int(a[0]), int(a[1])), (int(b[0]), int(b[1])),
+                     0, 3, cv2.LINE_AA)
+            t += on + off
+        truth_dash.append((tuple(p1.astype(int)), tuple(p2.astype(int))))
+    for text, lx, ly, rot in labels:
+        px, py = pt(lx, ly)
+        if rot == 0:
+            cv2.putText(img, text, (px - 7 * len(text), py + 8),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, 0, 2, cv2.LINE_AA)
+        else:
+            canvas = np.full((40, 22 * len(text)), 255, np.uint8)
+            cv2.putText(canvas, text, (4, 30), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.8, 0, 2, cv2.LINE_AA)
+            canvas = cv2.rotate(canvas, cv2.ROTATE_90_COUNTERCLOCKWISE)
+            ch, cw = canvas.shape
+            yy, xx = max(0, py - ch // 2), max(0, px - cw // 2)
+            roi = img[yy:yy + ch, xx:xx + cw]
+            np.minimum(roi, canvas[:roi.shape[0], :roi.shape[1]], out=roi)
+
+    truth_px = [(pt(x1, y1), pt(x2, y2)) for x1, y1, x2, y2 in segs]
+
+    if dirty:
+        # photocopier grain, blur, uneven light
+        noise = rng.integers(0, 255, img.shape, dtype=np.uint8)
+        img[noise < 4] = 0
+        img[noise > 251] = 255
+        img = cv2.GaussianBlur(img, (3, 3), 0)
+        grad = np.linspace(0.75, 1.0, img.shape[1])[None, :]
+        img = np.clip(img * grad, 0, 255).astype(np.uint8)
+    return img, truth_px, truth_circ, truth_dash
+
+
+def score(dxf_path, truth_px, labels, img_h, true_scale, used_scale=1.0,
+          truth_circ=(), truth_dash=(), truth_dims=()):
+    doc = ezdxf.readfile(dxf_path)
+    msp = doc.modelspace()
+    units_feet = doc.header.get("$INSUNITS", 0) == 2
+    # measure geometry independently of the locked scale: fit the DXF's
+    # extent to the truth's pixel extent, then report scale error separately
+    scale_err = None
+    s = used_scale if units_feet else 1.0
+    if units_feet:
+        scale_err = abs(s / true_scale - 1.0)
+
+    def unpt(x, y):  # DXF coords back to pixel space
+        return (x / s, img_h - y / s)
+
+    got = np.zeros((img_h + 4, 6000), np.uint8)
+    want = np.zeros_like(got)
+    for e in msp:
+        if e.dxftype() == "LINE":
+            p1 = unpt(e.dxf.start.x, e.dxf.start.y)
+            p2 = unpt(e.dxf.end.x, e.dxf.end.y)
+            cv2.line(got, (int(p1[0]), int(p1[1])),
+                     (int(p2[0]), int(p2[1])), 255, 1)
+        elif e.dxftype() == "LWPOLYLINE":
+            pts = [unpt(p[0], p[1]) for p in e.get_points()]
+            for a, b in zip(pts, pts[1:]):
+                cv2.line(got, (int(a[0]), int(a[1])),
+                         (int(b[0]), int(b[1])), 255, 1)
+        elif e.dxftype() in ("CIRCLE", "ARC"):
+            c = unpt(e.dxf.center.x, e.dxf.center.y)
+            r = e.dxf.radius / s
+            if e.dxftype() == "CIRCLE":
+                a0, a1 = 0.0, 360.0
+            else:
+                a0, a1 = e.dxf.start_angle, e.dxf.end_angle
+            sweep = (a1 - a0) % 360.0 or 360.0
+            angs = np.radians(a0 + np.linspace(0, sweep, 90))
+            # CAD y-up angles -> image y-down
+            xs = c[0] + r * np.cos(angs)
+            ys = c[1] - r * np.sin(angs)
+            for k in range(len(xs) - 1):
+                cv2.line(got, (int(xs[k]), int(ys[k])),
+                         (int(xs[k + 1]), int(ys[k + 1])), 255, 1)
+        elif e.dxftype() == "DIMENSION":
+            p2 = unpt(e.dxf.defpoint2.x, e.dxf.defpoint2.y)
+            p3 = unpt(e.dxf.defpoint3.x, e.dxf.defpoint3.y)
+            cv2.line(got, (int(p2[0]), int(p2[1])),
+                     (int(p3[0]), int(p3[1])), 255, 1)
+    for p1, p2 in truth_px:
+        cv2.line(want, p1, p2, 255, 1)
+    for c, r in truth_circ:
+        cv2.circle(want, c, int(r), 255, 1)
+    for p1, p2 in truth_dash:
+        cv2.line(want, p1, p2, 255, 1)
+    dash_ok = 0
+    if truth_dash:
+        dlines = [e for e in msp if e.dxftype() == "LINE"
+                  and e.dxf.linetype == "DASHED"]
+        for p1, p2 in truth_dash:
+            for e in dlines:
+                a = unpt(e.dxf.start.x, e.dxf.start.y)
+                b = unpt(e.dxf.end.x, e.dxf.end.y)
+                ends = sorted([a, b]), sorted([p1, p2])
+                if all(abs(ends[0][k][0] - ends[1][k][0]) < 12
+                       and abs(ends[0][k][1] - ends[1][k][1]) < 12
+                       for k in (0, 1)):
+                    dash_ok += 1
+                    break
+    circ_ok = 0
+    if truth_circ:
+        circs = [e for e in msp if e.dxftype() == "CIRCLE"]
+        for (tcx, tcy), tr in truth_circ:
+            for e in circs:
+                cx, cy = unpt(e.dxf.center.x, e.dxf.center.y)
+                if (abs(cx - tcx) < 6 and abs(cy - tcy) < 6
+                        and abs(e.dxf.radius / s - tr) < 5):
+                    circ_ok += 1
+                    break
+
+    k = np.ones((7, 7), np.uint8)
+    want_fat = cv2.dilate(want, k)
+    got_fat = cv2.dilate(got, k)
+    coverage = (want & got_fat).sum() / max(1, want.sum())
+    precision = (got & want_fat).sum() / max(1, got.sum())
+
+    # DIMENSION entities: text must parse to the truth value, geometry must
+    # span the truth dimension line. Their text also counts for text score.
+    dim_ents = [e for e in msp if e.dxftype() == "DIMENSION"]
+    dims_ok = 0
+    for value, seg in truth_dims:
+        for e in dim_ents:
+            got_v = scan2cad.parse_dimension(e.dxf.text or "")
+            if got_v is None or abs(got_v - value) > 1.0 / 24:
+                continue
+            p2 = unpt(e.dxf.defpoint2.x, e.dxf.defpoint2.y)
+            p3 = unpt(e.dxf.defpoint3.x, e.dxf.defpoint3.y)
+            length = np.hypot(p3[0] - p2[0], p3[1] - p2[1])
+            want_len = np.hypot(seg[2] - seg[0], seg[3] - seg[1]) * PX_PER_FT
+            if abs(length - want_len) < 12:
+                dims_ok += 1
+                break
+    texts = {e.dxf.text.strip().upper()
+             for e in msp if e.dxftype() == "TEXT"}
+    texts |= {(e.dxf.text or "").strip().upper() for e in dim_ents}
+    joined = " ".join(texts)
+    hits = sum(1 for t, *_ in labels
+               if t.upper() in texts or t.upper() in joined)
+
+    # joint closure: at each truth corner (shared truth endpoints), the
+    # recovered endpoints there must coincide EXACTLY, not approximately
+    corners = {}
+    for p1, p2 in truth_px:
+        for p in (p1, p2):
+            corners[p] = corners.get(p, 0) + 1
+    corners = [np.array(p, float) for p, k in corners.items() if k >= 2]
+    ends, verts = [], []
+    for e in msp:
+        if e.dxftype() == "LINE":
+            ends.append(unpt(e.dxf.start.x, e.dxf.start.y))
+            ends.append(unpt(e.dxf.end.x, e.dxf.end.y))
+        elif e.dxftype() == "LWPOLYLINE":
+            verts += [unpt(p[0], p[1]) for p in e.get_points()]
+    ends = np.array(ends) if ends else np.zeros((0, 2))
+    verts = np.array(verts) if verts else np.zeros((0, 2))
+    joints_ok, joints_tot = 0, 0
+    for c in corners:
+        near = ends[np.abs(ends - c).max(axis=1) <= 8] if len(ends) else []
+        nearv = (verts[np.abs(verts - c).max(axis=1) <= 8]
+                 if len(verts) else [])
+        if len(near) + len(nearv) == 0:
+            continue
+        joints_tot += 1
+        if len(near) == 0:
+            joints_ok += 1  # a polyline runs through - inherently joined
+            continue
+        if len(near) >= 2:
+            spread = np.linalg.norm(near - near.mean(axis=0), axis=1).max()
+            if spread <= 0.75:
+                joints_ok += 1
+        elif len(nearv):
+            # one line endpoint meeting a polyline vertex - closed if they
+            # coincide
+            gap = np.abs(np.array(nearv) - near[0]).max(axis=1).min()
+            if gap <= 0.75:
+                joints_ok += 1
+    return (coverage, precision, hits, len(labels), units_feet, scale_err,
+            circ_ok, len(truth_circ), dash_ok, len(truth_dash),
+            joints_ok, joints_tot, dims_ok, len(truth_dims))
+
+
+def _run(args, hard_recipe):
+    """Run the whole suite once (optionally degraded by hard_recipe), print the
+    per-plan lines and the health panel, and return the aggregate metrics."""
+    rng = np.random.default_rng(args.seed)
+    pyrng = random.Random(args.seed)
+
+    rows = []
+    prov_summaries = []          # per-plan provenance summaries (confidence)
+    outdir = (os.path.dirname(os.path.abspath(__file__))
+              if args.keep else tempfile.mkdtemp())
+    for i in range(args.n):
+        dirty = i % 2 == 1
+        segs, labels, dims, circles, dashes = generate_plan(pyrng)
+        img, truth_px, truth_circ, truth_dash = render(
+            segs, labels, rng, dirty=dirty, circles=circles, dashes=dashes)
+        if hard_recipe:
+            import dataset_builder
+            img, _ = dataset_builder.degrade(img, rng, recipe=hard_recipe)
+        img_path = os.path.join(outdir, f"bench_{i}.png")
+        cv2.imwrite(img_path, img)
+        dxf_path = os.path.join(outdir, f"bench_{i}.dxf")
+        t0 = time.perf_counter()
+        stats = scan2cad.convert(img_path, dxf_path, do_page_crop=False,
+                                 do_deskew=False, review_out=True,
+                                 log=lambda m: None)
+        elapsed = time.perf_counter() - t0
+        (cov, prec, hits, total, feet, serr, cok, ctot, dok, dtot,
+         jok, jtot, mok, mtot) = score(
+            dxf_path, truth_px, labels, img.shape[0], 1.0 / PX_PER_FT,
+            used_scale=stats.get("scale", 1.0), truth_circ=truth_circ,
+            truth_dash=truth_dash, truth_dims=dims)
+        lint_act, lint_info = 0, 0
+        lint_path = os.path.splitext(dxf_path)[0] + ".lint.json"
+        if os.path.exists(lint_path):
+            import json as _json
+            sev = _json.load(open(lint_path))["summary"]["by_severity"]
+            lint_act = sev.get("high", 0) + sev.get("medium", 0)
+            lint_info = sev.get("low", 0)
+        rows.append((i, dirty, cov, prec, hits, total, feet, cok, ctot,
+                     dok, dtot, jok, jtot, mok, mtot, serr, elapsed,
+                     lint_act, lint_info))
+        prov_path = os.path.splitext(dxf_path)[0] + ".provenance.json"
+        if os.path.exists(prov_path):
+            import json as _json
+            prov_summaries.append(_json.load(open(prov_path))["summary"])
+        stag = (f"YES {serr * 100:.1f}%" if feet else "no")
+        print(f"plan {i} ({'dirty' if dirty else 'clean'}): "
+              f"cover {cov * 100:5.1f}%  prec {prec * 100:5.1f}%  "
+              f"text {hits}/{total}  circ {cok}/{ctot}  dash {dok}/{dtot}  "
+              f"joint {jok}/{jtot}  dim {mok}/{mtot}  scale {stag}  "
+              f"{elapsed:.1f}s")
+
+    def agg(idx):
+        return np.mean([r[idx] for r in rows])
+    cov, prec = agg(2), agg(3)
+    txt = sum(r[4] for r in rows) / max(1, sum(r[5] for r in rows))
+    scl = sum(1 for r in rows if r[6])
+    circ = (sum(r[7] for r in rows), sum(r[8] for r in rows))
+    dsh = (sum(r[9] for r in rows), sum(r[10] for r in rows))
+    jnt = (sum(r[11] for r in rows), sum(r[12] for r in rows))
+    dm = (sum(r[13] for r in rows), sum(r[14] for r in rows))
+    serrs = [r[15] for r in rows if r[15] is not None]
+    times = [r[16] for r in rows]
+    lint_act = sum(r[17] for r in rows)
+    lint_info = sum(r[18] for r in rows)
+
+    def pct(x):
+        return f"{x * 100:.1f}%"
+
+    def frac(a, b):
+        return f"{a}/{b} ({(100.0 * a / b) if b else 0:.0f}%)"
+    tier = f"  [STRESS TIER: {hard_recipe}]" if hard_recipe else ""
+    print("\n" + "=" * 44 +
+          f"\n  PROJECT HEALTH PANEL  (benchmark v{BENCHMARK_VERSION})"
+          f"{tier}\n" + "=" * 44)
+    print(f"  Line coverage      {pct(cov)}")
+    print(f"  Line precision     {pct(prec)}")
+    print(f"  OCR / text         {pct(txt)}")
+    print(f"  Dimension accuracy {frac(dm[0], dm[1])}")
+    print(f"  Circles / arcs     {frac(circ[0], circ[1])}")
+    print(f"  Dashed linetypes   {frac(dsh[0], dsh[1])}")
+    print(f"  Corner closure     {frac(jnt[0], jnt[1])}")
+    print(f"  Scale locked       {frac(scl, len(rows))}"
+          + (f", err {np.mean(serrs) * 100:.2f}%" if serrs else ""))
+    print(f"  Processing time    {np.mean(times):.2f}s avg, "
+          f"{max(times):.2f}s max  (synthetic plans)")
+    print(f"  Lint (actionable)  {lint_act}  "
+          f"(high+medium: duplicates/mismatches - should stay ~0)")
+    print(f"  Lint (info)        {lint_info}  "
+          f"(low: floating fragments)")
+    # confidence readout (display only - "confidence everywhere" made visible
+    # in the guardrail; does not affect any score above)
+    if prov_summaries:
+        agg_conf, review_total = {}, 0
+        tiers = {"green": 0, "yellow": 0, "red": 0}
+        for s in prov_summaries:
+            for t, v in s.items():
+                if t == "_review_items":
+                    review_total += v
+                    continue
+                if t == "_tiers":
+                    for k in tiers:
+                        tiers[k] += v.get(k, 0)
+                    continue
+                if t.startswith("_"):        # _total and other meta keys
+                    continue
+                w, c = agg_conf.get(t, (0.0, 0))
+                agg_conf[t] = (w + v["avg_confidence"] * v["count"],
+                               c + v["count"])
+        parts = ", ".join(f"{t} {w / c:.2f}"
+                          for t, (w, c) in sorted(agg_conf.items()) if c)
+        print(f"  Confidence (avg)   {parts}")
+        print(f"  Review tiers       green {tiers['green']}, "
+              f"yellow {tiers['yellow']}, red {tiers['red']}  "
+              f"(green=minimal, yellow=recommended, red=verify)")
+        print(f"  Flagged for review {review_total}  "
+              f"(objects the reviewer should check first)")
+    print("=" * 44)
+    return {"recipe": hard_recipe or "clean", "cov": cov, "prec": prec,
+            "txt": txt, "dm": dm, "circ": circ, "dsh": dsh, "jnt": jnt,
+            "scl": (scl, len(rows)), "lint_act": lint_act}
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--n", type=int, default=6)
+    ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--keep", action="store_true",
+                    help="keep generated files next to benchmark.py")
+    ap.add_argument("--hard", metavar="RECIPE", default=None,
+                    help="stress tier: degrade every plan with a dataset_builder "
+                         "appearance-only recipe (e.g. appearance_hard, faxed, "
+                         "old_photocopy) before converting, or 'all' to sweep "
+                         "every recipe and print a robustness table. Geometry "
+                         "is not moved, so the same ground truth scores it. "
+                         "Does NOT change the default guardrail run.")
+    args = ap.parse_args()
+    if args.hard and args.hard != "all":
+        import dataset_builder
+        if args.hard not in dataset_builder.APPEARANCE_ONLY:
+            ap.error(f"--hard recipe must be appearance-only "
+                     f"(no geometry move) or 'all': "
+                     f"{dataset_builder.APPEARANCE_ONLY}")
+
+    if args.hard == "all":
+        import dataset_builder
+        recipes = [r for r in dataset_builder.APPEARANCE_ONLY
+                   if r != "clean_flatbed"]
+        results = [_run(args, None)] + [_run(args, r) for r in recipes]
+        print("\n" + "=" * 72)
+        print("  ROBUSTNESS TABLE  (how each metric holds up as scans degrade)")
+        print("=" * 72)
+        print(f"  {'recipe':16s} {'cover':>6s} {'prec':>6s} {'OCR':>6s} "
+              f"{'dim':>6s} {'circ':>5s} {'dash':>5s} {'corner':>7s} "
+              f"{'scale':>6s} {'act':>4s}")
+        for r in results:
+            dm, circ, dsh, jnt, scl = (r["dm"], r["circ"], r["dsh"],
+                                       r["jnt"], r["scl"])
+            print(f"  {r['recipe']:16s} {r['cov']*100:5.1f}% {r['prec']*100:5.1f}% "
+                  f"{r['txt']*100:5.1f}% {dm[0]}/{dm[1]:<4d} "
+                  f"{circ[0]}/{circ[1]:<3d} {dsh[0]}/{dsh[1]:<3d} "
+                  f"{jnt[0]}/{jnt[1]:<5d} {scl[0]}/{scl[1]:<4d} "
+                  f"{r['lint_act']:>4d}")
+        print("=" * 72)
+    else:
+        _run(args, args.hard)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,91 @@
+name: Build Drawing2CAD exe
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/drawing-scan-to-cad-v1l3ff]
+
+env:
+  # numeric prefix of the project folder - both outputs must carry it
+  PREFIX: "03"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install core dependencies
+        run: |
+          pip install numpy ezdxf pytesseract pillow
+          pip install --no-deps opencv-contrib-python-headless
+          # tests.py + benchmark.py need only the above; see requirements.txt
+          # for the full runtime set and the opencv-contrib install order.
+
+      - name: Run tests
+        run: python tests.py
+
+  build:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller customtkinter tkinterdnd2 numpy ezdxf pytesseract pillow pymupdf rapidocr_onnxruntime
+          pip uninstall -y opencv-python opencv-python-headless
+          pip install --force-reinstall --no-deps opencv-contrib-python-headless
+
+      # ---------------------------------------------------------------- 1/2
+      - name: Build PORTABLE exe (one file, no install)
+        run: pyinstaller Drawing2CAD.spec
+
+      - name: Name the portable exe
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          Copy-Item "dist\Drawing2CAD.exe" "out\$env:PREFIX - Drawing2CAD Portable.exe"
+
+      # ---------------------------------------------------------------- 2/2
+      - name: Build one-dir payload for the installer
+        run: pyinstaller Drawing2CAD-onedir.spec
+
+      - name: Ensure Inno Setup is available
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe not found after install" }
+          "ISCC=$iscc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Build STANDARD exe (installer)
+        shell: pwsh
+        run: |
+          & "$env:ISCC" "installer\Drawing2CAD.iss"
+          Copy-Item "installer_out\$env:PREFIX - Drawing2CAD.exe" "out\$env:PREFIX - Drawing2CAD.exe"
+
+      # ---------------------------------------------------------------- done
+      - name: Show the two outputs
+        shell: pwsh
+        run: Get-ChildItem out | Select-Object Name, Length
+
+      - name: Upload portable executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: Drawing2CAD-Portable
+          path: out/${{ env.PREFIX }} - Drawing2CAD Portable.exe
+
+      - name: Upload standard executable (installer)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Drawing2CAD-Installer
+          path: out/${{ env.PREFIX }} - Drawing2CAD.exe
